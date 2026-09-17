@@ -16,12 +16,12 @@ export class Editor {
   ctx: CanvasRenderingContext2D;
   ox = 60; oy = 60; k = 1;               // view: screen = world*k + o
   tool: Tool = 'select'; sel: Sel = null;
-  onChange = () => {}; onSelect = () => {};
+  onChange = () => {}; onSelect = () => {}; onView = () => {};
   private drawPts: Pt[] = []; private cur: Pt | null = null; private scalePts: Pt[] = []; private lenBuf = '';
   private drag: Drag = null; private mods = { shift: false, ctrl: false };
   private imgs = new Map<string, HTMLImageElement>();
 
-  constructor(public cv: HTMLCanvasElement, public p: Project, private status: (s: string) => void) {
+  constructor(public cv: HTMLCanvasElement, public p: Project, private status: (hint: string, coords: string) => void) {
     this.ctx = cv.getContext('2d')!;
     new ResizeObserver(() => this.resize()).observe(cv);
     cv.addEventListener('pointerdown', e => this.down(e));
@@ -77,11 +77,11 @@ export class Editor {
     for (const it of layout(this.p).items) pts.push({ x: it.x, y: it.y });
     const im = this.p.plan.image, el = im && this.img(im.src);
     if (im && el?.complete) pts.push({ x: im.x, y: im.y }, { x: im.x + el.width * im.cmPerPx, y: im.y + el.height * im.cmPerPx });
-    if (!pts.length) { this.ox = 60; this.oy = 60; this.k = 1; return this.render(); }
+    if (!pts.length) { this.ox = 60; this.oy = 60; this.k = 1; this.onView(); return this.render(); }
     const xs = pts.map(p => p.x), ys = pts.map(p => p.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     this.k = Math.min(this.cv.clientWidth / (x1 - x0 + 100), this.cv.clientHeight / (y1 - y0 + 100), 4);
     this.ox = (this.cv.clientWidth - (x0 + x1) * this.k) / 2; this.oy = (this.cv.clientHeight - (y0 + y1) * this.k) / 2;
-    this.render();
+    this.onView(); this.render();
   }
   changed() { this.onChange(); this.onSelect(); this.render(); }
 
@@ -113,7 +113,7 @@ export class Editor {
   private move(e: PointerEvent) {
     this.mods = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
     const p = this.w(e); this.cur = p;
-    if (this.drag?.kind === 'pan') { this.ox = this.drag.ox + e.clientX - this.drag.sx; this.oy = this.drag.oy + e.clientY - this.drag.sy; }
+    if (this.drag?.kind === 'pan') { this.ox = this.drag.ox + e.clientX - this.drag.sx; this.oy = this.drag.oy + e.clientY - this.drag.sy; this.onView(); }
     else if (this.drag?.kind === 'item') {
       const g = this.mods.ctrl ? 0.1 : this.mods.shift ? 10 : 1, it = this.drag.it;
       const t = this.snapToWalls(it, { x: Math.round((p.x + this.drag.dx) / g) * g, y: Math.round((p.y + this.drag.dy) / g) * g });
@@ -128,9 +128,12 @@ export class Editor {
   private up() { if (this.drag?.kind === 'item') this.onChange(); this.drag = null; }
   private wheel(e: WheelEvent) {
     e.preventDefault();
-    const r = this.cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-    const f = Math.exp(-e.deltaY * 0.0015), k2 = Math.min(20, Math.max(0.05, this.k * f));
-    this.ox = mx - (mx - this.ox) * k2 / this.k; this.oy = my - (my - this.oy) * k2 / this.k; this.k = k2; this.render();
+    const r = this.cv.getBoundingClientRect();
+    this.zoom(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+  }
+  zoom(f: number, mx = this.cv.clientWidth / 2, my = this.cv.clientHeight / 2) {
+    const k2 = Math.min(20, Math.max(0.05, this.k * f));
+    this.ox = mx - (mx - this.ox) * k2 / this.k; this.oy = my - (my - this.oy) * k2 / this.k; this.k = k2; this.onView(); this.render();
   }
   private key(e: KeyboardEvent) {
     if ((e.target as HTMLElement).matches('input,select,textarea')) return;
@@ -174,7 +177,7 @@ export class Editor {
     const c = this.cur ? `${this.cur.x.toFixed(0)}, ${this.cur.y.toFixed(0)} cm` : '';
     const t = this.tool === 'wall' ? (this.drawPts.length ? `len: ${this.lenBuf || (this.cur ? dist(this.cur, this.drawPts.at(-1)!).toFixed(0) : '')} cm  (type number+Enter, Shift=ortho, Ctrl=no snap, dblclick/Esc=end)` : 'click to start wall  (W)')
       : this.tool === 'scale' ? `click 2 points of known length (${this.scalePts.length}/2)` : 'V select · W wall · drag=pan/move · wheel=zoom · R/Q/E rotate · Del · Ctrl+D dup · F fit';
-    this.status(`${c}\n${t}`);
+    this.status(t, c);
   }
 
   // ---- walls vs items (item-local frame; wall = segment with thickness)
@@ -214,7 +217,7 @@ export class Editor {
   private resize() { const d = devicePixelRatio; this.cv.width = this.cv.clientWidth * d; this.cv.height = this.cv.clientHeight * d; this.render(); }
   render() {
     const { ctx: g, k, ox, oy } = this, W = this.cv.clientWidth, H = this.cv.clientHeight, d = devicePixelRatio;
-    g.setTransform(d, 0, 0, d, 0, 0); g.fillStyle = '#1e1f22'; g.fillRect(0, 0, W, H);
+    g.setTransform(d, 0, 0, d, 0, 0); g.fillStyle = '#f6f7f9'; g.fillRect(0, 0, W, H);
     g.setTransform(d * k, 0, 0, d * k, d * ox, d * oy);
     const im = this.p.plan.image;
     if (im) { const el = this.img(im.src); if (el.complete && el.width) { g.globalAlpha = im.opacity; g.drawImage(el, im.x, im.y, el.width * im.cmPerPx, el.height * im.cmPerPx); g.globalAlpha = 1; } }
@@ -223,7 +226,7 @@ export class Editor {
     g.lineWidth = 1 / k; g.beginPath();
     for (let x = x0; x < (W - ox) / k; x += step) { g.moveTo(x, (0 - oy) / k); g.lineTo(x, (H - oy) / k); }
     for (let y = y0; y < (H - oy) / k; y += step) { g.moveTo((0 - ox) / k, y); g.lineTo((W - ox) / k, y); }
-    g.strokeStyle = '#2c2e33'; g.stroke();
+    g.strokeStyle = '#e1e4ea'; g.stroke();
     // walls
     const label = (a: Pt, b: Pt, col: string) => {
       const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, ang = Math.atan2(b.y - a.y, b.x - a.x);
@@ -233,8 +236,8 @@ export class Editor {
     g.lineCap = 'square';
     this.p.plan.walls.forEach((w, i) => {
       const on = this.sel?.kind === 'wall' && this.sel.i === i;
-      g.strokeStyle = on ? '#4f8cff' : '#d0d3d8'; g.lineWidth = this.wallT(); g.beginPath(); g.moveTo(w.a.x, w.a.y); g.lineTo(w.b.x, w.b.y); g.stroke();
-      label(w.a, w.b, '#9aa0a6');
+      g.strokeStyle = on ? '#3b82f6' : '#2f3542'; g.lineWidth = this.wallT(); g.beginPath(); g.moveTo(w.a.x, w.a.y); g.lineTo(w.b.x, w.b.y); g.stroke();
+      label(w.a, w.b, '#5b6270');
     });
     // items
     for (const it of layout(this.p).items) {
@@ -242,9 +245,9 @@ export class Editor {
       g.save(); g.translate(it.x, it.y); g.rotate(it.rot * Math.PI / 180);
       const on = this.sel?.kind === 'item' && this.sel.id === it.id, bad = this.collides(it, it.x, it.y, it.rot);
       if (a.img) { const el = this.img(a.img); if (el.complete && el.width) g.drawImage(el, -a.w / 2, -a.d / 2, a.w, a.d); }
-      else { g.fillStyle = a.color + 'cc'; g.fillRect(-a.w / 2, -a.d / 2, a.w, a.d); }
-      g.lineWidth = (on ? 3 : 1.5) / k; g.strokeStyle = bad ? '#ff4040' : on ? '#4f8cff' : '#ffffffaa'; g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d);
-      if (a.w * k > 40) { g.fillStyle = '#fff'; g.font = `${12 / k}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a.name, 0, 0); }
+      else { g.fillStyle = a.color + 'b3'; g.fillRect(-a.w / 2, -a.d / 2, a.w, a.d); }
+      g.lineWidth = (on ? 3 : 1.5) / k; g.strokeStyle = bad ? '#e11d48' : on ? '#3b82f6' : '#00000055'; g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d);
+      if (a.w * k > 40) { g.fillStyle = '#1f2328'; g.font = `${12 / k}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a.name, 0, 0); }
       g.restore();
     }
     // in-progress wall

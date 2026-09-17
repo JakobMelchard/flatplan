@@ -5,41 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>flatplan</title>
 <style>
-  :root { --bg:#1e1f22; --panel:#26282c; --line:#3a3d42; --fg:#e6e6e6; --dim:#9aa0a6; --acc:#4f8cff; }
-  * { box-sizing:border-box }
-  body { margin:0; height:100vh; display:grid; grid-template-columns:300px 1fr; font:13px system-ui,sans-serif; background:var(--bg); color:var(--fg) }
-  aside { background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:14px }
-  main { position:relative; overflow:hidden }
+  :root { --bg:#1b1d21; --panel:#23262b; --line:#33373e; --fg:#e8eaed; --dim:#8b929c; --acc:#3b82f6; --ctl:#2c3036; --h:28px; --r:5px }
+  * { box-sizing:border-box; margin:0 }
+  [hidden] { display:none !important }
+  body { height:100vh; display:grid; grid-template-rows:44px 1fr 26px; grid-template-columns:260px 1fr 260px; grid-template-areas:"top top top" "left main right" "foot foot foot"; font:13px/1.35 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--fg); overflow:hidden }
+  header { grid-area:top; display:flex; align-items:center; gap:16px; padding:0 12px; background:var(--panel); border-bottom:1px solid var(--line) }
+  header .sp { flex:1 }
+  #left { grid-area:left; border-right:1px solid var(--line) }
+  #right { grid-area:right; border-left:1px solid var(--line) }
+  aside { background:var(--panel); overflow-y:auto; display:flex; flex-direction:column }
+  main { grid-area:main; position:relative; overflow:hidden; background:#f6f7f9 }
   canvas { display:block; width:100%; height:100%; touch-action:none }
-  h3 { margin:0 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim) }
-  section { display:flex; flex-direction:column; gap:6px }
+  footer { grid-area:foot; display:flex; align-items:center; justify-content:space-between; padding:0 12px; background:var(--panel); border-top:1px solid var(--line); color:var(--dim); font-size:12px; white-space:nowrap; overflow:hidden }
+  footer b { color:var(--fg); font-weight:600; margin-right:8px }
+
+  /* panels */
+  .sec { padding:12px; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:8px }
+  .sec:last-child { border-bottom:0 }
+  .sec.grow { flex:1; min-height:0 }
+  h3 { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--dim) }
+  small { color:var(--dim); font-size:11.5px }
   .row { display:flex; gap:6px; align-items:center }
   .row > * { flex:1; min-width:0 }
-  input, select, button { font:inherit; color:var(--fg); background:#1a1b1e; border:1px solid var(--line); border-radius:4px; padding:5px 7px }
-  input[type=color] { padding:0; height:28px }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:6px }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px }
+  .field { display:flex; flex-direction:column; gap:3px }
+  .field > span { font-size:11px; color:var(--dim) }
+  .kv { display:grid; grid-template-columns:56px 1fr; gap:6px 8px; align-items:center }
+  .kv > span { font-size:11.5px; color:var(--dim); text-align:right }
+
+  /* controls: one height everywhere */
+  input, select, button, .btn { height:var(--h); font:inherit; color:var(--fg); background:var(--ctl); border:1px solid var(--line); border-radius:var(--r); padding:0 8px; width:100%; min-width:0 }
+  input:focus, select:focus { outline:none; border-color:var(--acc) }
+  input[type=color] { padding:2px }
+  input[type=range] { padding:0; border:0; background:none; accent-color:var(--acc) }
   input[type=file] { display:none }
-  button { cursor:pointer; background:#33363b }
-  button:hover { background:#3d4046 }
+  button, .btn { cursor:pointer; display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; user-select:none }
+  button:hover, .btn:hover { background:#363a41 }
+  button.pri { background:var(--acc); border-color:var(--acc); color:#fff }
   button.on { background:var(--acc); border-color:var(--acc); color:#fff }
-  label.file { display:inline-block; cursor:pointer; background:#33363b; border:1px solid var(--line); border-radius:4px; padding:5px 7px; text-align:center }
-  ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:3px }
-  li { display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid var(--line); border-radius:4px; cursor:grab; background:#1a1b1e }
-  li.on { border-color:var(--acc) }
-  li .sw { width:14px; height:14px; border-radius:3px; flex:none; background-size:cover }
-  li span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-  li small { color:var(--dim) }
-  #status { position:absolute; left:8px; bottom:8px; color:var(--dim); font-size:12px; pointer-events:none; white-space:pre }
-  #tools { position:absolute; top:8px; left:8px; display:flex; gap:4px }
-  kbd { color:var(--dim) }
+  button.sq { width:var(--h); padding:0; flex:none }
+  header button, header select, header .btn { width:auto }
+  header .row { flex:none; gap:8px } header .row > * { flex:none }
+  .seg { display:inline-flex } .seg > * { border-radius:0; margin-left:-1px } .seg > :first-child { border-radius:var(--r) 0 0 var(--r); margin:0 } .seg > :last-child { border-radius:0 var(--r) var(--r) 0 }
+  #zoom { display:inline-flex; align-items:center; justify-content:center; width:56px; height:var(--h); border:1px solid var(--line); margin-left:-1px; color:var(--dim); font-variant-numeric:tabular-nums }
+
+  /* catalog */
+  ul { list-style:none; padding:0; display:flex; flex-direction:column; gap:2px; overflow-y:auto; flex:1; min-height:0 }
+  li { display:grid; grid-template-columns:16px 1fr auto var(--h); gap:8px; align-items:center; height:34px; padding:0 4px 0 8px; border:1px solid transparent; border-radius:var(--r); cursor:grab }
+  li:hover { background:var(--ctl) } li.on { border-color:var(--acc) }
+  li .sw { width:16px; height:16px; border-radius:3px; background-size:cover; border:1px solid #0004 }
+  li span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  li small { font-variant-numeric:tabular-nums }
+  details > summary { cursor:pointer; color:var(--dim); font-size:12px; list-style:none; display:flex; justify-content:space-between } details > summary::after { content:'+' } details[open] > summary::after { content:'–' }
+  details > div { display:flex; flex-direction:column; gap:6px; margin-top:8px }
+  .empty { color:var(--dim); font-size:12px; padding:8px 0 }
 </style>
 </head>
 <body>
-<aside id="side"></aside>
-<main>
-  <canvas id="c"></canvas>
-  <div id="tools"></div>
-  <div id="status"></div>
-</main>
+<header id="top"></header>
+<aside id="left"></aside>
+<main><canvas id="c"></canvas></main>
+<aside id="right"></aside>
+<footer><span><b id="mode"></b><span id="hint"></span></span><span id="coords"></span></footer>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -6,83 +6,112 @@ const h = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, 
   for (const [k, f] of Object.entries(on ?? {})) el.addEventListener(k, f as EventListener);
   el.append(...kids); return el;
 };
+const btn = (text: string, click: () => void, cls = '') => h('button', { textContent: text, className: cls, on: { click } });
 const num = (v: number, oninput: (n: number) => void, step = 1) => h('input', { type: 'number', value: String(v), step: String(step), on: { input: (e: any) => oninput(+e.target.value) } });
+const field = (label: string, ctl: HTMLElement) => h('label', { className: 'field' }, h('span', { textContent: label }), ctl);
+const file = (text: string, accept: string, onFile: (f: File) => void) => h('label', { className: 'btn', textContent: text }, h('input', { type: 'file', accept, on: { change: (e: any) => { const f = e.target.files[0]; e.target.value = ''; if (f) onFile(f); } } }));
+const sec = (title: string, ...kids: (Node | string)[]) => h('div', { className: 'sec' }, h('h3', { textContent: title }), ...kids);
 
-export function buildUI(side: HTMLElement, tools: HTMLElement, ed: Editor, setProject: (p: Project) => void) {
+export function buildUI(top: HTMLElement, left: HTMLElement, right: HTMLElement, ed: Editor, setProject: (p: Project) => void) {
   const p = () => ed.p;
   let editing: Asset | null = null;
 
-  // ---- tools
-  const tbtn = (t: Tool | 'fit', txt: string) => h('button', { textContent: txt, on: { click: () => t === 'fit' ? ed.fit() : (ed.setTool(t), syncTools()) } });
-  const tb: Record<string, HTMLButtonElement> = { select: tbtn('select', 'Select (V)'), wall: tbtn('wall', 'Wall (W)'), scale: tbtn('scale', 'Set scale'), fit: tbtn('fit', 'Fit (F)') };
-  tools.append(...Object.values(tb));
-  const syncTools = () => Object.entries(tb).forEach(([k, b]) => b.classList.toggle('on', k === ed.tool));
+  // ================= top bar: tools | layouts | view =================
+  const tb: Record<Tool, HTMLButtonElement> = { select: btn('Select', () => ed.setTool('select')), wall: btn('Wall', () => ed.setTool('wall')), scale: btn('Scale', () => ed.setTool('scale')) };
+  const syncTools = () => (Object.keys(tb) as Tool[]).forEach(k => tb[k].classList.toggle('on', k === ed.tool));
 
-  // ---- plan
-  const opacity = h('input', { type: 'range', min: '0', max: '1', step: '0.05', on: { input: (e: any) => { const im = p().plan.image; if (im) { im.opacity = +e.target.value; ed.changed(); } } } });
-  const planSec = h('section', {}, h('h3', { textContent: 'Floor plan' }),
-    h('div', { className: 'row' },
-      h('label', { className: 'file', textContent: 'Upload plan image' }, h('input', { type: 'file', accept: 'image/*', on: { change: async (e: any) => {
-        const f = e.target.files[0]; if (!f) return;
-        p().plan.image = { src: await shrinkImage(await readFile(f, 'dataURL')), x: 0, y: 0, cmPerPx: 1, opacity: 0.6 };
-        ed.changed(); ed.fit(); ed.setTool('scale'); syncTools();
-      } } })),
-      h('button', { textContent: 'Remove image', on: { click: () => { delete p().plan.image; ed.changed(); } } })),
-    h('div', { className: 'row' }, h('span', { textContent: 'Opacity' }), opacity),
-    h('div', { className: 'row' }, h('span', { textContent: 'Wall thickness cm' }), num(p().plan.wallT ?? 10, v => { p().plan.wallT = v || 10; ed.changed(); })),
-    h('button', { textContent: 'Clear all walls', on: { click: () => { if (confirm('Delete all walls?')) { p().plan.walls = []; ed.changed(); } } } }),
-    h('small', { textContent: 'Walls: click points, type length + Enter for exact cm. After image upload: click 2 points of known distance.' }));
-
-  // ---- furniture form
-  const f = { name: h('input', { placeholder: 'Name' }), w: h('input', { type: 'number', placeholder: 'W cm', value: '100' }), d: h('input', { type: 'number', placeholder: 'D cm', value: '50' }),
-    h: h('input', { type: 'number', placeholder: 'H cm', value: '75' }), color: h('input', { type: 'color', value: '#6b8e6b' }), img: '' as string };
-  const imgLabel = h('label', { className: 'file', textContent: 'Top-down image' }, h('input', { type: 'file', accept: 'image/*', on: { change: async (e: any) => { const fl = e.target.files[0]; if (fl) { f.img = await shrinkImage(await readFile(fl, 'dataURL'), 600); imgLabel.textContent = 'Image ✓'; } } } }));
-  const readForm = (): Omit<Asset, 'id'> => ({ name: f.name.value || 'item', w: +f.w.value || 50, d: +f.d.value || 50, h: +f.h.value || 0, color: f.color.value, ...(f.img ? { img: f.img } : {}) });
-  const fillForm = (a: Asset | null) => { editing = a; f.name.value = a?.name ?? ''; f.w.value = String(a?.w ?? 100); f.d.value = String(a?.d ?? 50); f.h.value = String(a?.h ?? 75); f.color.value = a?.color ?? '#6b8e6b'; f.img = a?.img ?? ''; imgLabel.textContent = f.img ? 'Image ✓' : 'Top-down image'; addBtn.textContent = a ? 'Update' : 'Add'; delBtn.hidden = !a; renderList(); };
-  const addBtn = h('button', { textContent: 'Add', on: { click: () => { if (editing) Object.assign(editing, readForm(), f.img ? {} : { img: undefined }); else p().assets.push({ id: uid(), ...readForm() }); fillForm(null); ed.changed(); } } });
-  const delBtn = h('button', { textContent: 'Delete', hidden: true, on: { click: () => { if (!editing) return; p().assets = p().assets.filter(a => a !== editing); p().layouts.forEach(l => l.items = l.items.filter(i => i.asset !== editing!.id)); fillForm(null); ed.changed(); } } });
-  const list = h('ul');
-  const renderList = () => {
-    list.replaceChildren(...p().assets.map(a => h('li', { draggable: true, className: a === editing ? 'on' : '', on: {
-      dragstart: (e: any) => e.dataTransfer.setData('asset', a.id), click: () => fillForm(a === editing ? null : a), dblclick: () => ed.addItem(a.id) } },
-      h('div', { className: 'sw', style: a.img ? `background-image:url(${a.img})` : `background:${a.color}` }), h('span', { textContent: a.name }), h('small', { textContent: `${a.w}×${a.d}` }),
-      h('button', { textContent: '+', title: 'place', on: { click: (e: any) => { e.stopPropagation(); ed.addItem(a.id); } } }))));
-  };
-  const libSec = h('section', {}, h('h3', { textContent: 'Furniture' }),
-    h('div', { className: 'row' }, f.name, f.color), h('div', { className: 'row' }, f.w, f.d, f.h), h('div', { className: 'row' }, imgLabel, addBtn, delBtn),
-    list, h('small', { textContent: 'Drag onto plan, or + / double-click to place at center.' }));
-
-  // ---- selection props
-  const selSec = h('section', {}, h('h3', { textContent: 'Selected' }));
-  const renderSel = () => {
-    const it = ed.selected(), a = it && asset(p(), it.asset);
-    selSec.replaceChildren(h('h3', { textContent: 'Selected' }));
-    if (!it || !a) return selSec.append(h('small', { textContent: ed.sel?.kind === 'wall' ? 'wall — Del to remove' : 'nothing' }));
-    selSec.append(h('div', { textContent: `${a.name} — ${a.w}×${a.d}×${a.h} cm` }),
-      h('div', { className: 'row' }, h('span', { textContent: 'x' }), num(it.x, v => { it.x = v; ed.changed(); }), h('span', { textContent: 'y' }), num(it.y, v => { it.y = v; ed.changed(); })),
-      h('div', { className: 'row' }, h('span', { textContent: 'rot' }), num(it.rot, v => { it.rot = v; ed.changed(); }, 15),
-        h('button', { textContent: '↻90', on: { click: () => ed.rotate(90) } }), h('button', { textContent: 'dup', on: { click: () => ed.dup() } }), h('button', { textContent: 'del', on: { click: () => ed.del() } })));
-  };
-
-  // ---- layouts
   const laySel = h('select', { on: { change: (e: any) => { p().current = e.target.value; ed.sel = null; ed.changed(); } } });
   const renderLayouts = () => laySel.replaceChildren(...p().layouts.map(l => h('option', { value: l.id, textContent: l.name, selected: l.id === p().current })));
-  const newLayout = (copy: boolean) => { const src = layout(p()), id = uid(); p().layouts.push({ id, name: prompt('Name:', copy ? src.name + ' copy' : `Layout ${p().layouts.length + 1}`) || 'Layout', items: copy ? src.items.map(i => ({ ...i, id: uid() })) : [] }); p().current = id; ed.changed(); };
-  const laySec = h('section', {}, h('h3', { textContent: 'Layouts' }), laySel,
-    h('div', { className: 'row' }, h('button', { textContent: 'New', on: { click: () => newLayout(false) } }), h('button', { textContent: 'Duplicate', on: { click: () => newLayout(true) } }),
-      h('button', { textContent: 'Rename', on: { click: () => { const l = layout(p()); l.name = prompt('Name:', l.name) || l.name; ed.changed(); } } }),
-      h('button', { textContent: 'Delete', on: { click: () => { if (p().layouts.length < 2 || !confirm('Delete layout?')) return; p().layouts = p().layouts.filter(l => l.id !== p().current); p().current = p().layouts[0]!.id; ed.changed(); } } })));
+  const newLayout = (copy: boolean) => {
+    const src = layout(p()), id = uid(), name = prompt('Layout name:', copy ? `${src.name} copy` : `Layout ${p().layouts.length + 1}`); if (!name) return;
+    p().layouts.push({ id, name, items: copy ? src.items.map(i => ({ ...i, id: uid() })) : [] }); p().current = id; ed.changed();
+  };
 
-  // ---- project
-  const projSec = h('section', {}, h('h3', { textContent: 'Project' }),
-    h('div', { className: 'row' },
-      h('button', { textContent: 'Export JSON', on: { click: () => download('flatplan.json', JSON.stringify(p())) } }),
-      h('label', { className: 'file', textContent: 'Import JSON' }, h('input', { type: 'file', accept: '.json', on: { change: async (e: any) => { const fl = e.target.files[0]; if (fl) { setProject(JSON.parse(await readFile(fl, 'text'))); refresh(); ed.fit(); } } } })),
-      h('button', { textContent: 'Reset', on: { click: () => { if (confirm('Erase everything?')) { setProject(blank()); refresh(); ed.changed(); } } } })));
+  const zoomLbl = h('span', { id: 'zoom' });
+  ed.onView = () => { zoomLbl.textContent = `${Math.round(ed.k * 100)}%`; };
 
-  side.append(planSec, libSec, selSec, laySec, projSec);
-  const refresh = () => { opacity.value = String(p().plan.image?.opacity ?? 0.6); renderList(); renderSel(); renderLayouts(); syncTools(); };
-  ed.onSelect = renderSel;
+  top.append(
+    h('div', { className: 'seg' }, tb.select, tb.wall, tb.scale),
+    h('div', { className: 'sp' }),
+    h('div', { className: 'row' }, h('small', { textContent: 'Layout' }), laySel,
+      h('div', { className: 'seg' }, btn('New', () => newLayout(false)), btn('Dup', () => newLayout(true)),
+        btn('Rename', () => { const l = layout(p()); l.name = prompt('Name:', l.name) || l.name; ed.changed(); }),
+        btn('Delete', () => { if (p().layouts.length < 2 || !confirm(`Delete "${layout(p()).name}"?`)) return; p().layouts = p().layouts.filter(l => l.id !== p().current); p().current = p().layouts[0]!.id; ed.changed(); }))),
+    h('div', { className: 'sp' }),
+    h('div', { className: 'seg' }, btn('−', () => ed.zoom(1 / 1.25), 'sq'), zoomLbl, btn('+', () => ed.zoom(1.25), 'sq'), btn('Fit', () => ed.fit())),
+    h('div', { className: 'seg' },
+      btn('Export', () => download('flatplan.json', JSON.stringify(p()))),
+      file('Import', '.json', async f => { setProject(JSON.parse(await readFile(f, 'text'))); refresh(); ed.fit(); }),
+      btn('Reset', () => { if (confirm('Erase everything?')) { setProject(blank()); ed.changed(); } })));
+
+  // ================= left: catalog =================
+  const f = { name: h('input', { placeholder: 'Sofa' }), w: h('input', { type: 'number', value: '100' }), d: h('input', { type: 'number', value: '50' }), h: h('input', { type: 'number', value: '75' }), color: h('input', { type: 'color', value: '#7fa07f' }), img: '' };
+  const imgBtn = file('Image…', 'image/*', async fl => { f.img = await shrinkImage(await readFile(fl, 'dataURL'), 600); imgBtn.textContent = 'Image ✓'; });
+  const readForm = (): Omit<Asset, 'id'> => ({ name: f.name.value.trim() || 'Item', w: +f.w.value || 50, d: +f.d.value || 50, h: +f.h.value || 0, color: f.color.value, ...(f.img ? { img: f.img } : {}) });
+  const form = h('details', { open: true });
+  const fillForm = (a: Asset | null) => {
+    editing = a; f.name.value = a?.name ?? ''; f.w.value = String(a?.w ?? 100); f.d.value = String(a?.d ?? 50); f.h.value = String(a?.h ?? 75); f.color.value = a?.color ?? '#7fa07f'; f.img = a?.img ?? '';
+    imgBtn.textContent = f.img ? 'Image ✓' : 'Image…'; saveBtn.textContent = a ? 'Update' : 'Add'; delBtn.hidden = !a; cancelBtn.hidden = !a; if (a) form.open = true; renderList();
+  };
+  const saveBtn = btn('Add', () => { if (editing) { Object.assign(editing, readForm()); if (!f.img) delete editing.img; } else p().assets.push({ id: uid(), ...readForm() }); fillForm(null); ed.changed(); }, 'pri');
+  const delBtn = btn('Delete', () => { if (!editing || !confirm(`Delete "${editing.name}" and all placed copies?`)) return; const id = editing.id; p().assets = p().assets.filter(a => a.id !== id); p().layouts.forEach(l => l.items = l.items.filter(i => i.asset !== id)); fillForm(null); ed.changed(); });
+  const cancelBtn = btn('Cancel', () => fillForm(null));
+  form.append(h('summary', { textContent: 'New item' }), h('div', {},
+    field('Name', f.name),
+    h('div', { className: 'grid3' }, field('W cm', f.w), field('D cm', f.d), field('H cm', f.h)),
+    h('div', { className: 'grid2' }, field('Color', f.color), field('Top view', imgBtn)),
+    h('div', { className: 'row' }, saveBtn, cancelBtn, delBtn)));
+
+  const list = h('ul');
+  const renderList = () => {
+    const rows = p().assets.map(a => h('li', { draggable: true, className: a === editing ? 'on' : '', title: 'drag onto plan · click to edit · double-click to place', on: {
+      dragstart: (e: any) => e.dataTransfer.setData('asset', a.id), click: () => fillForm(a === editing ? null : a), dblclick: () => ed.addItem(a.id) } },
+      h('div', { className: 'sw', style: a.img ? `background-image:url(${a.img})` : `background:${a.color}` }), h('span', { textContent: a.name }), h('small', { textContent: `${a.w}×${a.d}` }),
+      btn('+', () => ed.addItem(a.id), 'sq')));
+    list.replaceChildren(...(rows.length ? rows : [h('div', { className: 'empty', textContent: 'No furniture yet. Add items above, then drag them onto the plan.' })]));
+  };
+  left.append(h('div', { className: 'sec' }, h('h3', { textContent: 'Catalog' }), form), h('div', { className: 'sec grow' }, list));
+  fillForm(null);
+
+  // ================= right: properties (contextual) + plan =================
+  const props = h('div', { className: 'sec' });
+  const renderSel = () => {
+    const it = ed.selected(), a = it && asset(p(), it.asset);
+    props.replaceChildren(h('h3', { textContent: 'Selection' }));
+    if (it && a) {
+      const bad = ed.collides(it, it.x, it.y, it.rot);
+      props.append(h('div', { textContent: a.name }), h('small', { textContent: `${a.w} × ${a.d} × ${a.h} cm${bad ? ' — overlaps wall' : ''}`, style: bad ? 'color:#f87171' : '' }),
+        h('div', { className: 'kv' },
+          h('span', { textContent: 'X' }), num(it.x, v => { it.x = v; ed.changed(); }),
+          h('span', { textContent: 'Y' }), num(it.y, v => { it.y = v; ed.changed(); }),
+          h('span', { textContent: 'Rot °' }), num(it.rot, v => { it.rot = v; ed.changed(); }, 15)),
+        h('div', { className: 'grid3' }, btn('↺ 90', () => ed.rotate(-90)), btn('↻ 90', () => ed.rotate(90)), btn('Dup', () => ed.dup())),
+        btn('Delete item', () => ed.del()));
+    } else if (ed.sel?.kind === 'wall') {
+      const w = p().plan.walls[ed.sel.i]!;
+      props.append(h('div', { textContent: 'Wall' }), h('small', { textContent: `${Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y).toFixed(0)} cm` }), btn('Delete wall', () => ed.del()));
+    } else props.append(h('div', { className: 'empty', textContent: 'Nothing selected.' }));
+  };
+
+  const opacity = h('input', { type: 'range', min: '0', max: '1', step: '0.05', on: { input: (e: any) => { const im = p().plan.image; if (im) { im.opacity = +e.target.value; ed.changed(); } } } });
+  const imgRow = h('div', { className: 'grid2' });
+  const renderPlan = () => {
+    const im = p().plan.image;
+    imgRow.replaceChildren(file(im ? 'Replace image…' : 'Upload image…', 'image/*', async fl => {
+      p().plan.image = { src: await shrinkImage(await readFile(fl, 'dataURL')), x: 0, y: 0, cmPerPx: 1, opacity: 0.6 }; ed.changed(); ed.fit(); ed.setTool('scale');
+    }), btn(im ? 'Remove' : 'Set scale', () => im ? (delete p().plan.image, ed.changed()) : ed.setTool('scale')));
+    opacity.value = String(im?.opacity ?? 0.6); opacity.disabled = !im;
+  };
+  const plan = sec('Floor plan', imgRow,
+    h('div', { className: 'kv' }, h('span', { textContent: 'Opacity' }), opacity, h('span', { textContent: 'Wall cm' , title: 'wall thickness' }), num(p().plan.wallT ?? 10, v => { p().plan.wallT = v || 10; ed.changed(); })),
+    btn('Clear all walls', () => { if (confirm('Delete all walls?')) { p().plan.walls = []; ed.changed(); } }),
+    h('small', { textContent: 'Wall tool: click corners; type a length + Enter for exact cm; Shift = orthogonal. Scale tool: click two points of known distance.' }));
+  const keys = sec('Shortcuts', h('small', { innerHTML: 'V select · W wall · F fit<br>Drag empty space / Alt+drag = pan · wheel = zoom<br>R / Shift+R ±90° · Q / E ±15° · arrows nudge<br>Del remove · Ctrl+D duplicate · Esc deselect' }));
+  right.append(props, plan, keys);
+
+  // ================= wiring =================
+  const refresh = () => { renderList(); renderSel(); renderLayouts(); renderPlan(); syncTools(); ed.onView(); };
+  ed.onSelect = () => { renderSel(); syncTools(); };
   refresh();
   return refresh;
 }

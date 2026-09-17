@@ -29,6 +29,9 @@ Multiple arrangements over same plan + asset library. New / Duplicate / Rename /
 ## Persistence
 localStorage (`flatplan`), debounced. Export/Import JSON = full project incl. images as data URLs. Quota error surfaces in status bar → export.
 
+## UI
+Top bar: tools · layout switcher · zoom/fit · export/import. Left: catalog (form + list). Right: contextual properties, plan settings, shortcuts. Bottom: mode, hint, cursor cm.
+
 ## Structure
 - `src/model.ts` types, storage, file helpers
 - `src/editor.ts` canvas view, tools, hit-testing, render

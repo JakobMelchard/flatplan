@@ -5,7 +5,7 @@ export type Sel = { kind: 'item'; id: string } | { kind: 'wall'; i: number } | n
 type Drag = { kind: 'pan'; sx: number; sy: number; ox: number; oy: number } | { kind: 'item'; it: Item; dx: number; dy: number } | null;
 
 const GRID = 5, SNAP_PX = 12;
-const C = { bg: '#141619', grid: '#1d2025', grid2: '#272b31', wall: '#cfd4dc', acc: '#5b8cff', bad: '#f0616d', pill: '#1a1d21', pillLine: '#363b44', pillText: '#c9ced6', handle: '#141619' };
+const C = { bg: '#21222c', grid: '#2b2d3a', grid2: '#383a4a', wall: '#f8f8f2', acc: '#bd93f9', bad: '#ff5555', pill: '#282a36', pillLine: '#44475a', pillText: '#8be9fd', handle: '#282a36' };
 const lum = (hex: string) => { const n = parseInt(hex.slice(1, 7), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
 const segDist = (p: Pt, a: Pt, b: Pt) => {
@@ -256,7 +256,7 @@ export class Editor {
       const on = this.sel?.kind === 'item' && this.sel.id === it.id, bad = this.collides(it, it.x, it.y, it.rot);
       g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
       if (a.img) { const el = this.img(a.img); if (el.complete && el.width) g.drawImage(el, -a.w / 2, -a.d / 2, a.w, a.d); }
-      else { g.fillStyle = a.color; g.beginPath(); g.roundRect(-a.w / 2, -a.d / 2, a.w, a.d, Math.min(3, a.w / 8, a.d / 8)); g.fill(); }
+      else { g.fillStyle = a.color + 'd9'; g.beginPath(); g.roundRect(-a.w / 2, -a.d / 2, a.w, a.d, Math.min(3, a.w / 8, a.d / 8)); g.fill(); }
       g.shadowColor = 'transparent';
       g.lineWidth = (on ? 2 : 1) / k; g.strokeStyle = bad ? C.bad : on ? C.acc : 'rgba(255,255,255,.22)'; g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d);
       if (on) { const hs = 7 / k; g.fillStyle = C.handle; for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as [number, number][]) { g.beginPath(); g.rect(sx * a.w / 2 - hs / 2, sy * a.d / 2 - hs / 2, hs, hs); g.fill(); g.stroke(); } }

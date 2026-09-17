@@ -27,6 +27,7 @@ const thumb = (a: Asset) => {
   const k = 34 / Math.max(a.w, a.d), i = h('i', { style: `width:${Math.max(4, a.w * k)}px;height:${Math.max(4, a.d * k)}px;${a.img ? `background-image:url(${a.img})` : `background:${a.color}`}` });
   return h('div', { className: 'th' }, i);
 };
+const PALETTE = ['#50fa7b', '#8be9fd', '#ffb86c', '#ff79c6', '#f1fa8c', '#bd93f9', '#ff5555'];
 const kbd = (s: string) => s.replace(/\[(.+?)\]/g, '<kbd>$1</kbd>');
 
 export function buildUI(top: HTMLElement, left: HTMLElement, right: HTMLElement, main: HTMLElement, ed: Editor, setProject: (p: Project) => void) {
@@ -83,7 +84,7 @@ export function buildUI(top: HTMLElement, left: HTMLElement, right: HTMLElement,
   document.body.append(dlg);
   const openDlg = (a: Asset | null) => {
     editing = a; dTitle.textContent = a ? 'Edit item' : 'New item'; dDel.hidden = !a;
-    f.name.value = a?.name ?? ''; f.w.value = String(a?.w ?? 100); f.d.value = String(a?.d ?? 50); f.h.value = String(a?.h ?? 75); f.color.value = a?.color ?? '#8fb08f'; f.img = a?.img ?? '';
+    f.name.value = a?.name ?? ''; f.w.value = String(a?.w ?? 100); f.d.value = String(a?.d ?? 50); f.h.value = String(a?.h ?? 75); f.color.value = a?.color ?? PALETTE[p().assets.length % PALETTE.length]!; f.img = a?.img ?? '';
     imgBtn.childNodes[1]!.textContent = f.img ? 'Image set' : 'Top-view image'; dlg.showModal(); f.name.focus();
   };
 

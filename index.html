@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>flatplan</title>
 <style>
-  :root { color-scheme:dark; --bg:#121417; --panel:#1a1d21; --panel2:#202329; --line:#2a2e35; --line2:#363b44; --fg:#e6e8eb; --dim:#9aa1ab; --mute:#6b7280; --acc:#5b8cff; --acc2:#1f2d4d; --danger:#f0616d; --danger2:#3a1f24; --ctl:#262a30; --tip:#0c0e11; --h:32px; --r:8px; --sh:0 1px 2px rgba(0,0,0,.4),0 4px 12px rgba(0,0,0,.35) }
+  :root { color-scheme:dark; --bg:#191a21; --panel:#282a36; --panel2:#2f313f; --line:#383a4a; --line2:#44475a; --fg:#f8f8f2; --dim:#b8bcd0; --mute:#6272a4; --acc:#bd93f9; --acc2:#3d3459; --accfg:#1e1f29; --cyan:#8be9fd; --danger:#ff5555; --danger2:#4a2b3a; --ctl:#363948; --tip:#191a21; --h:32px; --r:8px; --sh:0 1px 2px rgba(0,0,0,.5),0 6px 16px rgba(0,0,0,.4) }
   * { box-sizing:border-box; margin:0 }
   [hidden] { display:none !important }
   html, body { height:100% }
@@ -16,7 +16,7 @@
   /* ---------- header ---------- */
   header { grid-area:top; display:flex; align-items:center; gap:20px; padding:0 16px; background:var(--panel); border-bottom:1px solid var(--line) }
   .brand { font-weight:700; letter-spacing:-.02em; font-size:15px; display:flex; align-items:center; gap:8px }
-  .brand i { width:20px; height:20px; border-radius:6px; background:var(--acc); display:inline-block }
+  .brand i { width:20px; height:20px; border-radius:6px; background:linear-gradient(135deg,var(--acc),#ff79c6); display:inline-block }
   .tabs { display:flex; align-items:center; gap:2px; flex:1; min-width:0; overflow-x:auto }
   .tab { display:flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:var(--r); color:var(--dim); white-space:nowrap; font-weight:500 }
   .tab:hover { background:var(--ctl); color:var(--fg) }
@@ -30,7 +30,7 @@
   .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:var(--h); padding:0 12px; border-radius:var(--r); border:1px solid var(--line2); background:var(--panel2); font-weight:500; white-space:nowrap; user-select:none }
   .btn:hover { background:var(--ctl) }
   .btn.ghost { border-color:transparent; background:none; color:var(--dim) } .btn.ghost:hover { background:var(--ctl); color:var(--fg) }
-  .btn.pri { background:var(--acc); border-color:var(--acc); color:#fff } .btn.pri:hover { background:#4a7bf0 }
+  .btn.pri { background:var(--acc); border-color:var(--acc); color:var(--accfg) } .btn.pri:hover { background:#caa8ff }
   .btn.danger { color:var(--danger) } .btn.danger:hover { background:var(--danger2) }
   .btn.icon { width:var(--h); padding:0 }
   .btn svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round }
@@ -88,7 +88,7 @@
   #toolbar .tool:hover { background:var(--ctl); color:var(--fg) }
   #toolbar .tool.on { background:var(--acc2); color:var(--acc) }
   #toolbar .tool svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round }
-  #toolbar .tool::after { content:attr(data-tip); position:absolute; top:44px; left:50%; transform:translateX(-50%); background:var(--tip); color:#fff; font-size:11px; padding:4px 8px; border-radius:6px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .1s }
+  #toolbar .tool::after { content:attr(data-tip); position:absolute; top:44px; left:50%; transform:translateX(-50%); background:var(--tip); color:var(--fg); border:1px solid var(--line); font-size:11px; padding:4px 8px; border-radius:6px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .1s }
   #toolbar .tool:hover::after { opacity:1 }
   #toolbar .sep { width:1px; height:22px; background:var(--line); margin:0 4px }
   #zoomer { right:12px; bottom:12px; gap:2px; padding:3px }
@@ -96,7 +96,7 @@
   #zoomer .btn.icon { width:30px }
   #zoomer .pct { min-width:52px; text-align:center; color:var(--dim); font-variant-numeric:tabular-nums; font-size:12px }
   #status { left:12px; bottom:12px; padding:0 10px; height:30px; gap:10px; font-size:12px; color:var(--dim); max-width:calc(100% - 200px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-  #status b { color:var(--fg); font-weight:600 } #status .c { font-variant-numeric:tabular-nums; color:var(--mute) }
+  #status b { color:var(--fg); font-weight:600 } #status .c { font-variant-numeric:tabular-nums; color:var(--cyan) }
 
   /* ---------- dialog ---------- */
   dialog { margin:auto; border:1px solid var(--line); border-radius:14px; padding:0; width:380px; background:var(--panel); box-shadow:0 20px 50px rgba(0,0,0,.6); color:var(--fg) }

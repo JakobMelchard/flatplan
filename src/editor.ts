@@ -1,0 +1,216 @@
+import { type Project, type Pt, type Item, layout, asset, uid } from './model';
+
+export type Tool = 'select' | 'wall' | 'scale';
+export type Sel = { kind: 'item'; id: string } | { kind: 'wall'; i: number } | null;
+type Drag = { kind: 'pan'; sx: number; sy: number; ox: number; oy: number } | { kind: 'item'; it: Item; dx: number; dy: number } | null;
+
+const GRID = 5, SNAP_PX = 12;
+const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
+const segDist = (p: Pt, a: Pt, b: Pt) => {
+  const l2 = dist(a, b) ** 2; if (!l2) return dist(p, a);
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2));
+  return dist(p, { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) });
+};
+
+export class Editor {
+  ctx: CanvasRenderingContext2D;
+  ox = 60; oy = 60; k = 1;               // view: screen = world*k + o
+  tool: Tool = 'select'; sel: Sel = null;
+  onChange = () => {}; onSelect = () => {};
+  private drawPts: Pt[] = []; private cur: Pt | null = null; private scalePts: Pt[] = []; private lenBuf = '';
+  private drag: Drag = null; private mods = { shift: false, ctrl: false };
+  private imgs = new Map<string, HTMLImageElement>();
+
+  constructor(public cv: HTMLCanvasElement, public p: Project, private status: (s: string) => void) {
+    this.ctx = cv.getContext('2d')!;
+    new ResizeObserver(() => this.resize()).observe(cv);
+    cv.addEventListener('pointerdown', e => this.down(e));
+    cv.addEventListener('pointermove', e => this.move(e));
+    cv.addEventListener('pointerup', () => this.up());
+    cv.addEventListener('dblclick', () => this.endWall());
+    cv.addEventListener('wheel', e => this.wheel(e), { passive: false });
+    cv.addEventListener('dragover', e => e.preventDefault());
+    cv.addEventListener('drop', e => { e.preventDefault(); const id = e.dataTransfer?.getData('asset'); if (id) this.addItem(id, this.w(e)); });
+    window.addEventListener('keydown', e => this.key(e));
+    window.addEventListener('keyup', e => { this.mods = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey }; });
+    this.resize();
+  }
+
+  // ---- coords
+  w(e: { clientX: number; clientY: number }): Pt { const r = this.cv.getBoundingClientRect(); return { x: (e.clientX - r.left - this.ox) / this.k, y: (e.clientY - r.top - this.oy) / this.k }; }
+  private snapWall(p: Pt): Pt {
+    const eps = SNAP_PX / this.k;
+    for (const w of this.p.plan.walls) for (const q of [w.a, w.b]) if (dist(p, q) < eps) return { ...q };
+    for (const q of this.drawPts) if (dist(p, q) < eps) return { ...q };
+    let s = this.mods.ctrl ? p : { x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID };
+    const last = this.drawPts.at(-1);
+    if (last && this.mods.shift) s = Math.abs(s.x - last.x) > Math.abs(s.y - last.y) ? { x: s.x, y: last.y } : { x: last.x, y: s.y };
+    return s;
+  }
+
+  // ---- public ops
+  setTool(t: Tool) { this.tool = t; this.drawPts = []; this.scalePts = []; this.lenBuf = ''; this.sel = null; this.onSelect(); this.hint(); this.render(); }
+  selected(): Item | undefined { const s = this.sel; return s?.kind === 'item' ? layout(this.p).items.find(i => i.id === s.id) : undefined; }
+  addItem(assetId: string, at?: Pt) {
+    const c = at ?? this.w({ clientX: this.cv.clientWidth / 2 + this.cv.getBoundingClientRect().left, clientY: this.cv.clientHeight / 2 + this.cv.getBoundingClientRect().top });
+    const it: Item = { id: uid(), asset: assetId, x: Math.round(c.x), y: Math.round(c.y), rot: 0 };
+    layout(this.p).items.push(it); this.sel = { kind: 'item', id: it.id }; this.changed();
+  }
+  rotate(deg: number) { const it = this.selected(); if (it) { it.rot = ((it.rot + deg) % 360 + 360) % 360; this.changed(); } }
+  del() {
+    const s = this.sel;
+    if (s?.kind === 'item') { const l = layout(this.p); l.items = l.items.filter(i => i.id !== s.id); }
+    else if (s?.kind === 'wall') this.p.plan.walls.splice(s.i, 1);
+    this.sel = null; this.changed();
+  }
+  dup() { const it = this.selected(); if (it) { const c = { ...it, id: uid(), x: it.x + 20, y: it.y + 20 }; layout(this.p).items.push(c); this.sel = { kind: 'item', id: c.id }; this.changed(); } }
+  fit() {
+    const pts: Pt[] = this.p.plan.walls.flatMap(w => [w.a, w.b]);
+    for (const it of layout(this.p).items) pts.push({ x: it.x, y: it.y });
+    const im = this.p.plan.image, el = im && this.img(im.src);
+    if (im && el?.complete) pts.push({ x: im.x, y: im.y }, { x: im.x + el.width * im.cmPerPx, y: im.y + el.height * im.cmPerPx });
+    if (!pts.length) { this.ox = 60; this.oy = 60; this.k = 1; return this.render(); }
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    this.k = Math.min(this.cv.clientWidth / (x1 - x0 + 100), this.cv.clientHeight / (y1 - y0 + 100), 4);
+    this.ox = (this.cv.clientWidth - (x0 + x1) * this.k) / 2; this.oy = (this.cv.clientHeight - (y0 + y1) * this.k) / 2;
+    this.render();
+  }
+  changed() { this.onChange(); this.onSelect(); this.render(); }
+
+  // ---- events
+  private down(e: PointerEvent) {
+    this.cv.setPointerCapture(e.pointerId);
+    const p = this.w(e);
+    if (e.button === 1 || (e.button === 0 && e.altKey)) return this.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox: this.ox, oy: this.oy };
+    if (e.button !== 0) return;
+    if (this.tool === 'wall') { const s = this.snapWall(p); if (this.drawPts.length && dist(s, this.drawPts[0]!) < 1e-6 && this.drawPts.length > 2) return this.commitWall(s), this.endWall(); this.commitWall(s); return; }
+    if (this.tool === 'scale') { this.scalePts.push(p); if (this.scalePts.length === 2) this.applyScale(); return this.render(); }
+    // select
+    const items = layout(this.p).items;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i]!, a = asset(this.p, it.asset); if (!a) continue;
+      const r = -it.rot * Math.PI / 180, dx = p.x - it.x, dy = p.y - it.y;
+      const lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r);
+      if (Math.abs(lx) <= a.w / 2 && Math.abs(ly) <= a.d / 2) {
+        this.sel = { kind: 'item', id: it.id }; this.drag = { kind: 'item', it, dx: it.x - p.x, dy: it.y - p.y };
+        items.push(...items.splice(i, 1)); // raise to top
+        this.onSelect(); return this.render();
+      }
+    }
+    const wi = this.p.plan.walls.findIndex(w => segDist(p, w.a, w.b) < 8 / this.k);
+    this.sel = wi >= 0 ? { kind: 'wall', i: wi } : null; this.onSelect();
+    if (wi < 0) this.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox: this.ox, oy: this.oy };
+    this.render();
+  }
+  private move(e: PointerEvent) {
+    this.mods = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
+    const p = this.w(e); this.cur = p;
+    if (this.drag?.kind === 'pan') { this.ox = this.drag.ox + e.clientX - this.drag.sx; this.oy = this.drag.oy + e.clientY - this.drag.sy; }
+    else if (this.drag?.kind === 'item') {
+      const g = this.mods.ctrl ? 0.1 : this.mods.shift ? 10 : 1;
+      this.drag.it.x = Math.round((p.x + this.drag.dx) / g) * g; this.drag.it.y = Math.round((p.y + this.drag.dy) / g) * g;
+      this.onSelect();
+    }
+    this.hint(); this.render();
+  }
+  private up() { if (this.drag?.kind === 'item') this.onChange(); this.drag = null; }
+  private wheel(e: WheelEvent) {
+    e.preventDefault();
+    const r = this.cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const f = Math.exp(-e.deltaY * 0.0015), k2 = Math.min(20, Math.max(0.05, this.k * f));
+    this.ox = mx - (mx - this.ox) * k2 / this.k; this.oy = my - (my - this.oy) * k2 / this.k; this.k = k2; this.render();
+  }
+  private key(e: KeyboardEvent) {
+    if ((e.target as HTMLElement).matches('input,select,textarea')) return;
+    this.mods = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
+    if (this.tool === 'wall' && this.drawPts.length) {
+      if (/^[\d.]$/.test(e.key)) { this.lenBuf += e.key; return this.hint(); }
+      if (e.key === 'Backspace') { this.lenBuf = this.lenBuf.slice(0, -1); return this.hint(); }
+      if (e.key === 'Enter' && this.lenBuf) { this.commitWall(this.byLength(+this.lenBuf)); this.lenBuf = ''; return this.hint(); }
+    }
+    const it = this.selected();
+    switch (e.key) {
+      case 'Escape': this.endWall(); this.scalePts = []; this.sel = null; this.onSelect(); break;
+      case 'Delete': case 'Backspace': this.del(); break;
+      case 'r': this.rotate(90); break; case 'R': this.rotate(-90); break;
+      case 'q': this.rotate(-15); break; case 'e': this.rotate(15); break;
+      case 'd': if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.dup(); } break;
+      case 'f': this.fit(); break;
+      case 'v': this.setTool('select'); break; case 'w': this.setTool('wall'); break;
+      case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown':
+        if (it) { const s = e.shiftKey ? 10 : 1; it.x += e.key === 'ArrowLeft' ? -s : e.key === 'ArrowRight' ? s : 0; it.y += e.key === 'ArrowUp' ? -s : e.key === 'ArrowDown' ? s : 0; e.preventDefault(); this.changed(); }
+    }
+    this.render();
+  }
+
+  // ---- wall / scale tools
+  private byLength(len: number): Pt {
+    const last = this.drawPts.at(-1)!, c = this.cur ?? { x: last.x + 1, y: last.y };
+    let dx = c.x - last.x, dy = c.y - last.y;
+    if (Math.abs(dx) > Math.abs(dy)) { dx = Math.sign(dx) || 1; dy = 0; } else { dy = Math.sign(dy) || 1; dx = 0; }
+    return { x: last.x + dx * len, y: last.y + dy * len };
+  }
+  private commitWall(pt: Pt) { const last = this.drawPts.at(-1); if (last && dist(last, pt) > 0.5) this.p.plan.walls.push({ a: last, b: pt }); this.drawPts.push(pt); this.onChange(); }
+  private endWall() { this.drawPts = []; this.lenBuf = ''; this.hint(); this.render(); }
+  private applyScale() {
+    const [a, b] = this.scalePts as [Pt, Pt], im = this.p.plan.image; this.scalePts = [];
+    const real = +(prompt('Real length of marked segment (cm):') ?? '');
+    if (im && real > 0) { const f = real / dist(a, b); im.cmPerPx *= f; im.x = a.x - (a.x - im.x) * f; im.y = a.y - (a.y - im.y) * f; this.onChange(); }
+    this.setTool('select');
+  }
+  private hint() {
+    const c = this.cur ? `${this.cur.x.toFixed(0)}, ${this.cur.y.toFixed(0)} cm` : '';
+    const t = this.tool === 'wall' ? (this.drawPts.length ? `len: ${this.lenBuf || (this.cur ? dist(this.cur, this.drawPts.at(-1)!).toFixed(0) : '')} cm  (type number+Enter, Shift=ortho, Ctrl=no snap, dblclick/Esc=end)` : 'click to start wall  (W)')
+      : this.tool === 'scale' ? `click 2 points of known length (${this.scalePts.length}/2)` : 'V select · W wall · drag=pan/move · wheel=zoom · R/Q/E rotate · Del · Ctrl+D dup · F fit';
+    this.status(`${c}\n${t}`);
+  }
+
+  // ---- render
+  private img(src: string) { let el = this.imgs.get(src); if (!el) { el = new Image(); el.onload = () => this.render(); el.src = src; this.imgs.set(src, el); } return el; }
+  private resize() { const d = devicePixelRatio; this.cv.width = this.cv.clientWidth * d; this.cv.height = this.cv.clientHeight * d; this.render(); }
+  render() {
+    const { ctx: g, k, ox, oy } = this, W = this.cv.clientWidth, H = this.cv.clientHeight, d = devicePixelRatio;
+    g.setTransform(d, 0, 0, d, 0, 0); g.fillStyle = '#1e1f22'; g.fillRect(0, 0, W, H);
+    g.setTransform(d * k, 0, 0, d * k, d * ox, d * oy);
+    const im = this.p.plan.image;
+    if (im) { const el = this.img(im.src); if (el.complete && el.width) { g.globalAlpha = im.opacity; g.drawImage(el, im.x, im.y, el.width * im.cmPerPx, el.height * im.cmPerPx); g.globalAlpha = 1; } }
+    // grid
+    const step = k > 0.6 ? 50 : k > 0.15 ? 100 : 500, x0 = Math.floor(-ox / k / step) * step, y0 = Math.floor(-oy / k / step) * step;
+    g.lineWidth = 1 / k; g.beginPath();
+    for (let x = x0; x < (W - ox) / k; x += step) { g.moveTo(x, (0 - oy) / k); g.lineTo(x, (H - oy) / k); }
+    for (let y = y0; y < (H - oy) / k; y += step) { g.moveTo((0 - ox) / k, y); g.lineTo((W - ox) / k, y); }
+    g.strokeStyle = '#2c2e33'; g.stroke();
+    // items
+    for (const it of layout(this.p).items) {
+      const a = asset(this.p, it.asset); if (!a) continue;
+      g.save(); g.translate(it.x, it.y); g.rotate(it.rot * Math.PI / 180);
+      const on = this.sel?.kind === 'item' && this.sel.id === it.id;
+      if (a.img) { const el = this.img(a.img); if (el.complete && el.width) g.drawImage(el, -a.w / 2, -a.d / 2, a.w, a.d); }
+      else { g.fillStyle = a.color + 'cc'; g.fillRect(-a.w / 2, -a.d / 2, a.w, a.d); }
+      g.lineWidth = (on ? 3 : 1.5) / k; g.strokeStyle = on ? '#4f8cff' : '#ffffffaa'; g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d);
+      if (a.w * k > 40) { g.fillStyle = '#fff'; g.font = `${12 / k}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a.name, 0, 0); }
+      g.restore();
+    }
+    // walls
+    const label = (a: Pt, b: Pt, col: string) => {
+      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, ang = Math.atan2(b.y - a.y, b.x - a.x);
+      g.save(); g.translate(m.x, m.y); g.rotate(Math.abs(ang) > Math.PI / 2 ? ang + Math.PI : ang);
+      g.fillStyle = col; g.font = `${11 / k}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'bottom'; g.fillText(`${dist(a, b).toFixed(0)}`, 0, -6 / k); g.restore();
+    };
+    g.lineCap = 'round';
+    this.p.plan.walls.forEach((w, i) => {
+      const on = this.sel?.kind === 'wall' && this.sel.i === i;
+      g.strokeStyle = on ? '#4f8cff' : '#d0d3d8'; g.lineWidth = Math.max(8, 4 / k); g.beginPath(); g.moveTo(w.a.x, w.a.y); g.lineTo(w.b.x, w.b.y); g.stroke();
+      label(w.a, w.b, '#9aa0a6');
+    });
+    // in-progress wall
+    const last = this.drawPts.at(-1);
+    if (last && this.cur && this.tool === 'wall') {
+      const s = this.lenBuf ? this.byLength(+this.lenBuf || 0) : this.snapWall(this.cur);
+      g.lineWidth = Math.max(8, 4 / k); g.strokeStyle = '#4f8cff88'; g.beginPath(); g.moveTo(last.x, last.y); g.lineTo(s.x, s.y); g.stroke(); label(last, s, '#4f8cff');
+      g.fillStyle = '#4f8cff'; g.beginPath(); g.arc(s.x, s.y, 4 / k, 0, 7); g.fill();
+    }
+    for (const q of this.scalePts) { g.fillStyle = '#ff5f5f'; g.beginPath(); g.arc(q.x, q.y, 5 / k, 0, 7); g.fill(); }
+    if (this.scalePts.length === 1 && this.cur) { g.strokeStyle = '#ff5f5f'; g.lineWidth = 2 / k; g.beginPath(); g.moveTo(this.scalePts[0]!.x, this.scalePts[0]!.y); g.lineTo(this.cur.x, this.cur.y); g.stroke(); }
+  }
+}

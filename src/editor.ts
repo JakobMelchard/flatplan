@@ -16,12 +16,12 @@ export class Editor {
   ctx: CanvasRenderingContext2D;
   ox = 60; oy = 60; k = 1;               // view: screen = world*k + o
   tool: Tool = 'select'; sel: Sel = null;
-  onChange = () => {}; onSelect = () => {}; onView = () => {};
+  onChange = () => {}; onSelect = () => {}; onView = () => {}; status = (_hint: string, _coords: string) => {};
   private drawPts: Pt[] = []; private cur: Pt | null = null; private scalePts: Pt[] = []; private lenBuf = '';
   private drag: Drag = null; private mods = { shift: false, ctrl: false };
   private imgs = new Map<string, HTMLImageElement>();
 
-  constructor(public cv: HTMLCanvasElement, public p: Project, private status: (hint: string, coords: string) => void) {
+  constructor(public cv: HTMLCanvasElement, public p: Project) {
     this.ctx = cv.getContext('2d')!;
     new ResizeObserver(() => this.resize()).observe(cv);
     cv.addEventListener('pointerdown', e => this.down(e));
@@ -175,8 +175,8 @@ export class Editor {
   }
   private hint() {
     const c = this.cur ? `${this.cur.x.toFixed(0)}, ${this.cur.y.toFixed(0)} cm` : '';
-    const t = this.tool === 'wall' ? (this.drawPts.length ? `len: ${this.lenBuf || (this.cur ? dist(this.cur, this.drawPts.at(-1)!).toFixed(0) : '')} cm  (type number+Enter, Shift=ortho, Ctrl=no snap, dblclick/Esc=end)` : 'click to start wall  (W)')
-      : this.tool === 'scale' ? `click 2 points of known length (${this.scalePts.length}/2)` : 'V select · W wall · drag=pan/move · wheel=zoom · R/Q/E rotate · Del · Ctrl+D dup · F fit';
+    const t = this.tool === 'wall' ? (this.drawPts.length ? `${this.lenBuf ? `length ${this.lenBuf}` : `${this.cur ? dist(this.cur, this.drawPts.at(-1)!).toFixed(0) : ''}`} cm · type a number + Enter · Shift = 90° · Esc to finish` : 'click to place the first corner')
+      : this.tool === 'scale' ? `click two points with a known distance (${this.scalePts.length}/2)` : this.selected() ? 'drag to move · R rotate · Del remove' : 'click an item to select · drag empty space to pan';
     this.status(t, c);
   }
 
@@ -217,45 +217,61 @@ export class Editor {
   private resize() { const d = devicePixelRatio; this.cv.width = this.cv.clientWidth * d; this.cv.height = this.cv.clientHeight * d; this.render(); }
   render() {
     const { ctx: g, k, ox, oy } = this, W = this.cv.clientWidth, H = this.cv.clientHeight, d = devicePixelRatio;
-    g.setTransform(d, 0, 0, d, 0, 0); g.fillStyle = '#f6f7f9'; g.fillRect(0, 0, W, H);
+    g.setTransform(d, 0, 0, d, 0, 0); g.fillStyle = '#f7f8fa'; g.fillRect(0, 0, W, H);
     g.setTransform(d * k, 0, 0, d * k, d * ox, d * oy);
     const im = this.p.plan.image;
     if (im) { const el = this.img(im.src); if (el.complete && el.width) { g.globalAlpha = im.opacity; g.drawImage(el, im.x, im.y, el.width * im.cmPerPx, el.height * im.cmPerPx); g.globalAlpha = 1; } }
     // grid
     const step = k > 0.6 ? 50 : k > 0.15 ? 100 : 500, x0 = Math.floor(-ox / k / step) * step, y0 = Math.floor(-oy / k / step) * step;
-    g.lineWidth = 1 / k; g.beginPath();
-    for (let x = x0; x < (W - ox) / k; x += step) { g.moveTo(x, (0 - oy) / k); g.lineTo(x, (H - oy) / k); }
-    for (let y = y0; y < (H - oy) / k; y += step) { g.moveTo((0 - ox) / k, y); g.lineTo((W - ox) / k, y); }
-    g.strokeStyle = '#e1e4ea'; g.stroke();
+    for (const [mod, col] of [[1, '#e9ecf1'], [step === 50 ? 2 : 5, '#d9dee6']] as [number, string][]) {
+      g.lineWidth = 1 / k; g.beginPath();
+      for (let x = x0; x < (W - ox) / k; x += step) if (Math.round(x / step) % mod === 0) { g.moveTo(x, (0 - oy) / k); g.lineTo(x, (H - oy) / k); }
+      for (let y = y0; y < (H - oy) / k; y += step) if (Math.round(y / step) % mod === 0) { g.moveTo((0 - ox) / k, y); g.lineTo((W - ox) / k, y); }
+      g.strokeStyle = col; g.stroke();
+    }
     // walls
+    const wallPts = this.p.plan.walls.flatMap(w => [w.a, w.b]), cen = { x: wallPts.reduce((s, q) => s + q.x, 0) / (wallPts.length || 1), y: wallPts.reduce((s, q) => s + q.y, 0) / (wallPts.length || 1) };
     const label = (a: Pt, b: Pt, col: string) => {
-      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, ang = Math.atan2(b.y - a.y, b.x - a.x);
-      g.save(); g.translate(m.x, m.y); g.rotate(Math.abs(ang) > Math.PI / 2 ? ang + Math.PI : ang);
-      g.fillStyle = col; g.font = `${11 / k}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'bottom'; g.fillText(`${dist(a, b).toFixed(0)}`, 0, -6 / k); g.restore();
+      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; let ang = Math.atan2(b.y - a.y, b.x - a.x);
+      if (Math.abs(ang) > Math.PI / 2) ang += Math.PI;
+      const outward = (m.x - cen.x) * -Math.sin(ang) + (m.y - cen.y) * Math.cos(ang); // + when centroid is on the "up" side of text frame
+      g.save(); g.translate(m.x, m.y); g.rotate(ang);
+      const txt = `${dist(a, b).toFixed(0)} cm`, fs = 11 / k; g.font = `500 ${fs}px Inter, system-ui`; const tw = g.measureText(txt).width;
+      g.fillStyle = '#fff'; g.strokeStyle = '#d3d7de'; g.lineWidth = 1 / k;
+      const rx = -tw / 2 - 5 / k, rw = tw + 10 / k, rh = 16 / k, ry = outward > 0 ? this.wallT() / 2 + 6 / k : -this.wallT() / 2 - 6 / k - rh;
+      g.beginPath(); g.roundRect(rx, ry, rw, rh, 4 / k); g.fill(); g.stroke();
+      g.fillStyle = col; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, 0, ry + rh / 2); g.restore();
     };
     g.lineCap = 'square';
     this.p.plan.walls.forEach((w, i) => {
       const on = this.sel?.kind === 'wall' && this.sel.i === i;
-      g.strokeStyle = on ? '#3b82f6' : '#2f3542'; g.lineWidth = this.wallT(); g.beginPath(); g.moveTo(w.a.x, w.a.y); g.lineTo(w.b.x, w.b.y); g.stroke();
-      label(w.a, w.b, '#5b6270');
+      g.strokeStyle = on ? '#2f6bff' : '#1f2937'; g.lineWidth = this.wallT(); g.beginPath(); g.moveTo(w.a.x, w.a.y); g.lineTo(w.b.x, w.b.y); g.stroke();
     });
     // items
     for (const it of layout(this.p).items) {
       const a = asset(this.p, it.asset); if (!a) continue;
       g.save(); g.translate(it.x, it.y); g.rotate(it.rot * Math.PI / 180);
       const on = this.sel?.kind === 'item' && this.sel.id === it.id, bad = this.collides(it, it.x, it.y, it.rot);
+      g.shadowColor = 'rgba(16,24,40,.18)'; g.shadowBlur = 8; g.shadowOffsetY = 2;
       if (a.img) { const el = this.img(a.img); if (el.complete && el.width) g.drawImage(el, -a.w / 2, -a.d / 2, a.w, a.d); }
-      else { g.fillStyle = a.color + 'b3'; g.fillRect(-a.w / 2, -a.d / 2, a.w, a.d); }
-      g.lineWidth = (on ? 3 : 1.5) / k; g.strokeStyle = bad ? '#e11d48' : on ? '#3b82f6' : '#00000055'; g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d);
-      if (a.w * k > 40) { g.fillStyle = '#1f2328'; g.font = `${12 / k}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a.name, 0, 0); }
+      else { g.fillStyle = a.color; g.beginPath(); g.roundRect(-a.w / 2, -a.d / 2, a.w, a.d, Math.min(3, a.w / 8, a.d / 8)); g.fill(); }
+      g.shadowColor = 'transparent';
+      g.lineWidth = (on ? 2 : 1) / k; g.strokeStyle = bad ? '#dc2626' : on ? '#2f6bff' : 'rgba(0,0,0,.28)'; g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d);
+      if (on) { const hs = 7 / k; g.fillStyle = '#fff'; for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as [number, number][]) { g.beginPath(); g.rect(sx * a.w / 2 - hs / 2, sy * a.d / 2 - hs / 2, hs, hs); g.fill(); g.stroke(); } }
+      if (a.w * k > 44 && a.d * k > 18) {
+        g.fillStyle = 'rgba(0,0,0,.72)'; g.font = `500 ${12 / k}px Inter, system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(a.name, 0, a.d * k > 40 ? -7 / k : 0);
+        if (a.d * k > 40) { g.font = `${10.5 / k}px Inter, system-ui`; g.fillStyle = 'rgba(0,0,0,.5)'; g.fillText(`${a.w} × ${a.d}`, 0, 8 / k); }
+      }
       g.restore();
     }
+    this.p.plan.walls.forEach(w => label(w.a, w.b, '#374151'));
     // in-progress wall
     const last = this.drawPts.at(-1);
     if (last && this.cur && this.tool === 'wall') {
       const s = this.lenBuf ? this.byLength(+this.lenBuf || 0) : this.snapWall(this.cur);
-      g.lineWidth = this.wallT(); g.strokeStyle = '#4f8cff88'; g.beginPath(); g.moveTo(last.x, last.y); g.lineTo(s.x, s.y); g.stroke(); label(last, s, '#4f8cff');
-      g.fillStyle = '#4f8cff'; g.beginPath(); g.arc(s.x, s.y, 4 / k, 0, 7); g.fill();
+      g.lineWidth = this.wallT(); g.strokeStyle = '#2f6bff88'; g.beginPath(); g.moveTo(last.x, last.y); g.lineTo(s.x, s.y); g.stroke(); label(last, s, '#4f8cff');
+      g.fillStyle = '#2f6bff'; g.beginPath(); g.arc(s.x, s.y, 4 / k, 0, 7); g.fill();
     }
     for (const q of this.scalePts) { g.fillStyle = '#ff5f5f'; g.beginPath(); g.arc(q.x, q.y, 5 / k, 0, 7); g.fill(); }
     if (this.scalePts.length === 1 && this.cur) { g.strokeStyle = '#ff5f5f'; g.lineWidth = 2 / k; g.beginPath(); g.moveTo(this.scalePts[0]!.x, this.scalePts[0]!.y); g.lineTo(this.cur.x, this.cur.y); g.stroke(); }

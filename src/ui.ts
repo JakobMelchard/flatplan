@@ -29,6 +29,7 @@ export function buildUI(side: HTMLElement, tools: HTMLElement, ed: Editor, setPr
       } } })),
       h('button', { textContent: 'Remove image', on: { click: () => { delete p().plan.image; ed.changed(); } } })),
     h('div', { className: 'row' }, h('span', { textContent: 'Opacity' }), opacity),
+    h('div', { className: 'row' }, h('span', { textContent: 'Wall thickness cm' }), num(p().plan.wallT ?? 10, v => { p().plan.wallT = v || 10; ed.changed(); })),
     h('button', { textContent: 'Clear all walls', on: { click: () => { if (confirm('Delete all walls?')) { p().plan.walls = []; ed.changed(); } } } }),
     h('small', { textContent: 'Walls: click points, type length + Enter for exact cm. After image upload: click 2 points of known distance.' }));
 

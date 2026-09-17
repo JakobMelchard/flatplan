@@ -5,14 +5,14 @@ export type PlanImage = { src: string; x: number; y: number; cmPerPx: number; op
 export type Asset = { id: string; name: string; w: number; d: number; h: number; color: string; img?: string };
 export type Item = { id: string; asset: string; x: number; y: number; rot: number }; // center, degrees
 export type Layout = { id: string; name: string; items: Item[] };
-export type Project = { plan: { walls: Wall[]; image?: PlanImage }; assets: Asset[]; layouts: Layout[]; current: string };
+export type Project = { plan: { walls: Wall[]; wallT?: number; image?: PlanImage }; assets: Asset[]; layouts: Layout[]; current: string };
 
 const KEY = 'flatplan';
 export const uid = () => Math.random().toString(36).slice(2, 10);
 
 export const blank = (): Project => {
   const id = uid();
-  return { plan: { walls: [] }, assets: [], layouts: [{ id, name: 'Layout 1', items: [] }], current: id };
+  return { plan: { walls: [], wallT: 10 }, assets: [], layouts: [{ id, name: 'Layout 1', items: [] }], current: id };
 };
 
 export const load = (): Project => {

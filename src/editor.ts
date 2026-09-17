@@ -54,9 +54,17 @@ export class Editor {
   addItem(assetId: string, at?: Pt) {
     const c = at ?? this.w({ clientX: this.cv.clientWidth / 2 + this.cv.getBoundingClientRect().left, clientY: this.cv.clientHeight / 2 + this.cv.getBoundingClientRect().top });
     const it: Item = { id: uid(), asset: assetId, x: Math.round(c.x), y: Math.round(c.y), rot: 0 };
-    layout(this.p).items.push(it); this.sel = { kind: 'item', id: it.id }; this.changed();
+    layout(this.p).items.push(it); this.unstick(it); this.sel = { kind: 'item', id: it.id }; this.changed();
   }
-  rotate(deg: number) { const it = this.selected(); if (it) { it.rot = ((it.rot + deg) % 360 + 360) % 360; this.changed(); } }
+  rotate(deg: number) { const it = this.selected(); if (it) { it.rot = ((it.rot + deg) % 360 + 360) % 360; this.unstick(it); this.changed(); } }
+  // nearest wall-free spot within 150cm (spiral search), else leave in place
+  private unstick(it: Item) {
+    if (!this.collides(it, it.x, it.y, it.rot)) return;
+    for (let r = 5; r <= 150; r += 5) for (let a = 0; a < 360; a += 15) {
+      const x = it.x + r * Math.cos(a * Math.PI / 180), y = it.y + r * Math.sin(a * Math.PI / 180);
+      if (!this.collides(it, x, y, it.rot)) { it.x = Math.round(x); it.y = Math.round(y); return; }
+    }
+  }
   del() {
     const s = this.sel;
     if (s?.kind === 'item') { const l = layout(this.p); l.items = l.items.filter(i => i.id !== s.id); }
@@ -97,7 +105,7 @@ export class Editor {
         this.onSelect(); return this.render();
       }
     }
-    const wi = this.p.plan.walls.findIndex(w => segDist(p, w.a, w.b) < 8 / this.k);
+    const wi = this.p.plan.walls.findIndex(w => segDist(p, w.a, w.b) < Math.max(this.wallT() / 2, 6 / this.k));
     this.sel = wi >= 0 ? { kind: 'wall', i: wi } : null; this.onSelect();
     if (wi < 0) this.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox: this.ox, oy: this.oy };
     this.render();
@@ -107,8 +115,12 @@ export class Editor {
     const p = this.w(e); this.cur = p;
     if (this.drag?.kind === 'pan') { this.ox = this.drag.ox + e.clientX - this.drag.sx; this.oy = this.drag.oy + e.clientY - this.drag.sy; }
     else if (this.drag?.kind === 'item') {
-      const g = this.mods.ctrl ? 0.1 : this.mods.shift ? 10 : 1;
-      this.drag.it.x = Math.round((p.x + this.drag.dx) / g) * g; this.drag.it.y = Math.round((p.y + this.drag.dy) / g) * g;
+      const g = this.mods.ctrl ? 0.1 : this.mods.shift ? 10 : 1, it = this.drag.it;
+      const t = this.snapToWalls(it, { x: Math.round((p.x + this.drag.dx) / g) * g, y: Math.round((p.y + this.drag.dy) / g) * g });
+      // swept move so fast drags can't tunnel through walls; then slide along x / y
+      const reach = (from: Pt, to: Pt): Pt => { const base = this.hits(it, from.x, from.y, it.rot), n = Math.ceil(dist(from, to) / 4) || 1; let ok = from; for (let i = 1; i <= n; i++) { const q = { x: from.x + (to.x - from.x) * i / n, y: from.y + (to.y - from.y) * i / n }; if (this.hits(it, q.x, q.y, it.rot).some(h => !base.includes(h))) break; ok = q; } return ok; }; // may leave walls it's already in, never enter new ones
+      let c = reach(it, t); c = reach(c, { x: t.x, y: c.y }); c = reach(c, { x: c.x, y: t.y });
+      it.x = Math.round(c.x * 10) / 10; it.y = Math.round(c.y * 10) / 10;
       this.onSelect();
     }
     this.hint(); this.render();
@@ -165,6 +177,38 @@ export class Editor {
     this.status(`${c}\n${t}`);
   }
 
+  // ---- walls vs items (item-local frame; wall = segment with thickness)
+  wallT() { return this.p.plan.wallT ?? 10; }
+  private local(it: Pt, rot: number, q: Pt): Pt { const r = -rot * Math.PI / 180, dx = q.x - it.x, dy = q.y - it.y; return { x: dx * Math.cos(r) - dy * Math.sin(r), y: dx * Math.sin(r) + dy * Math.cos(r) }; }
+  collides(it: Item, x: number, y: number, rot: number) { return this.hits(it, x, y, rot).length > 0; }
+  hits(it: Item, x: number, y: number, rot: number): number[] {
+    const a = asset(this.p, it.asset); if (!a) return [];
+    const hw = a.w / 2 + this.wallT() / 2 - 0.01, hd = a.d / 2 + this.wallT() / 2 - 0.01, c = { x, y };
+    return this.p.plan.walls.flatMap((w, i) => {
+      const p = this.local(c, rot, w.a), q = this.local(c, rot, w.b), dx = q.x - p.x, dy = q.y - p.y;
+      let t0 = 0, t1 = 1; // Liang-Barsky clip of segment against [-hw,hw]x[-hd,hd]
+      for (const [num, den] of [[p.x + hw, -dx], [hw - p.x, dx], [p.y + hd, -dy], [hd - p.y, dy]] as [number, number][]) {
+        if (den === 0) { if (num < 0) return []; continue; }
+        const t = num / den; if (den < 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+        if (t0 > t1) return [];
+      }
+      return [i];
+    });
+  }
+  private snapToWalls(it: Item, t: Pt): Pt {
+    const a = asset(this.p, it.asset); if (!a || it.rot % 90) return t;
+    const [hw, hd] = it.rot % 180 ? [a.d / 2, a.w / 2] : [a.w / 2, a.d / 2], T = this.wallT() / 2, eps = SNAP_PX / this.k;
+    let { x, y } = t;
+    for (const w of this.p.plan.walls) {
+      const vert = Math.abs(w.a.x - w.b.x) < 1e-6, horz = Math.abs(w.a.y - w.b.y) < 1e-6;
+      if (vert && y + hd > Math.min(w.a.y, w.b.y) && y - hd < Math.max(w.a.y, w.b.y))
+        for (const f of [w.a.x - T, w.a.x + T]) for (const e of [x - hw, x + hw]) if (Math.abs(e - f) < eps) x += f - e;
+      if (horz && x + hw > Math.min(w.a.x, w.b.x) && x - hw < Math.max(w.a.x, w.b.x))
+        for (const f of [w.a.y - T, w.a.y + T]) for (const e of [y - hd, y + hd]) if (Math.abs(e - f) < eps) y += f - e;
+    }
+    return { x, y };
+  }
+
   // ---- render
   private img(src: string) { let el = this.imgs.get(src); if (!el) { el = new Image(); el.onload = () => this.render(); el.src = src; this.imgs.set(src, el); } return el; }
   private resize() { const d = devicePixelRatio; this.cv.width = this.cv.clientWidth * d; this.cv.height = this.cv.clientHeight * d; this.render(); }
@@ -180,34 +224,34 @@ export class Editor {
     for (let x = x0; x < (W - ox) / k; x += step) { g.moveTo(x, (0 - oy) / k); g.lineTo(x, (H - oy) / k); }
     for (let y = y0; y < (H - oy) / k; y += step) { g.moveTo((0 - ox) / k, y); g.lineTo((W - ox) / k, y); }
     g.strokeStyle = '#2c2e33'; g.stroke();
-    // items
-    for (const it of layout(this.p).items) {
-      const a = asset(this.p, it.asset); if (!a) continue;
-      g.save(); g.translate(it.x, it.y); g.rotate(it.rot * Math.PI / 180);
-      const on = this.sel?.kind === 'item' && this.sel.id === it.id;
-      if (a.img) { const el = this.img(a.img); if (el.complete && el.width) g.drawImage(el, -a.w / 2, -a.d / 2, a.w, a.d); }
-      else { g.fillStyle = a.color + 'cc'; g.fillRect(-a.w / 2, -a.d / 2, a.w, a.d); }
-      g.lineWidth = (on ? 3 : 1.5) / k; g.strokeStyle = on ? '#4f8cff' : '#ffffffaa'; g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d);
-      if (a.w * k > 40) { g.fillStyle = '#fff'; g.font = `${12 / k}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a.name, 0, 0); }
-      g.restore();
-    }
     // walls
     const label = (a: Pt, b: Pt, col: string) => {
       const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, ang = Math.atan2(b.y - a.y, b.x - a.x);
       g.save(); g.translate(m.x, m.y); g.rotate(Math.abs(ang) > Math.PI / 2 ? ang + Math.PI : ang);
       g.fillStyle = col; g.font = `${11 / k}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'bottom'; g.fillText(`${dist(a, b).toFixed(0)}`, 0, -6 / k); g.restore();
     };
-    g.lineCap = 'round';
+    g.lineCap = 'square';
     this.p.plan.walls.forEach((w, i) => {
       const on = this.sel?.kind === 'wall' && this.sel.i === i;
-      g.strokeStyle = on ? '#4f8cff' : '#d0d3d8'; g.lineWidth = Math.max(8, 4 / k); g.beginPath(); g.moveTo(w.a.x, w.a.y); g.lineTo(w.b.x, w.b.y); g.stroke();
+      g.strokeStyle = on ? '#4f8cff' : '#d0d3d8'; g.lineWidth = this.wallT(); g.beginPath(); g.moveTo(w.a.x, w.a.y); g.lineTo(w.b.x, w.b.y); g.stroke();
       label(w.a, w.b, '#9aa0a6');
     });
+    // items
+    for (const it of layout(this.p).items) {
+      const a = asset(this.p, it.asset); if (!a) continue;
+      g.save(); g.translate(it.x, it.y); g.rotate(it.rot * Math.PI / 180);
+      const on = this.sel?.kind === 'item' && this.sel.id === it.id, bad = this.collides(it, it.x, it.y, it.rot);
+      if (a.img) { const el = this.img(a.img); if (el.complete && el.width) g.drawImage(el, -a.w / 2, -a.d / 2, a.w, a.d); }
+      else { g.fillStyle = a.color + 'cc'; g.fillRect(-a.w / 2, -a.d / 2, a.w, a.d); }
+      g.lineWidth = (on ? 3 : 1.5) / k; g.strokeStyle = bad ? '#ff4040' : on ? '#4f8cff' : '#ffffffaa'; g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d);
+      if (a.w * k > 40) { g.fillStyle = '#fff'; g.font = `${12 / k}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a.name, 0, 0); }
+      g.restore();
+    }
     // in-progress wall
     const last = this.drawPts.at(-1);
     if (last && this.cur && this.tool === 'wall') {
       const s = this.lenBuf ? this.byLength(+this.lenBuf || 0) : this.snapWall(this.cur);
-      g.lineWidth = Math.max(8, 4 / k); g.strokeStyle = '#4f8cff88'; g.beginPath(); g.moveTo(last.x, last.y); g.lineTo(s.x, s.y); g.stroke(); label(last, s, '#4f8cff');
+      g.lineWidth = this.wallT(); g.strokeStyle = '#4f8cff88'; g.beginPath(); g.moveTo(last.x, last.y); g.lineTo(s.x, s.y); g.stroke(); label(last, s, '#4f8cff');
       g.fillStyle = '#4f8cff'; g.beginPath(); g.arc(s.x, s.y, 4 / k, 0, 7); g.fill();
     }
     for (const q of this.scalePts) { g.fillStyle = '#ff5f5f'; g.beginPath(); g.arc(q.x, q.y, 5 / k, 0, 7); g.fill(); }

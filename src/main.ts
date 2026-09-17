@@ -8,3 +8,4 @@ const refresh = buildUI(document.getElementById('side')!, document.getElementByI
 let t = 0;
 ed.onChange = () => { refresh(); clearTimeout(t); t = window.setTimeout(() => { const err = save(ed.p); if (err) status.textContent = err; }, 300); };
 ed.fit();
+(window as any).ed = ed;

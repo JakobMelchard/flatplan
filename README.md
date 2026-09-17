@@ -17,6 +17,7 @@ npm i && npm run dev
 - Click entry → edit / delete asset (removes its instances).
 
 ## Items
+Walls are solid: drag slides along wall faces (swept test, no tunneling), edges snap to faces, placement/rotation auto-nudges to nearest free spot. Red outline = overlap left (e.g. sidebar typed coords). Wall thickness set in Floor plan.
 `R`/`Shift+R` ±90°, `Q`/`E` ±15°, arrows nudge (Shift ×10), `Del`, `Ctrl+D` dup. Drag snaps 1cm (Shift 10, Ctrl 0.1). Sidebar shows x/y/rot inputs.
 
 ## View

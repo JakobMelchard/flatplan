@@ -1,17 +1,22 @@
-import { type Project, type Pt, type Item, layout, asset, uid } from './model';
+import { type Project, type Pt, type Item, type Wall, type Opening, layout, asset, uid } from './model';
 
-export type Tool = 'select' | 'wall' | 'scale';
-export type Sel = { kind: 'item'; id: string } | { kind: 'wall'; i: number } | null;
-type Drag = { kind: 'pan'; sx: number; sy: number; ox: number; oy: number } | { kind: 'item'; it: Item; dx: number; dy: number } | null;
+export type Tool = 'select' | 'wall' | 'door' | 'window' | 'scale';
+export type Sel = { kind: 'item'; id: string } | { kind: 'wall'; i: number } | { kind: 'open'; id: string } | null;
+type Drag = { kind: 'pan'; sx: number; sy: number; ox: number; oy: number } | { kind: 'item'; it: Item; dx: number; dy: number } | { kind: 'open'; o: Opening; dt: number } | null;
 
 const GRID = 5, SNAP_PX = 12;
-const C = { bg: '#21222c', grid: '#2b2d3a', grid2: '#383a4a', wall: '#f8f8f2', acc: '#bd93f9', bad: '#ff5555', pill: '#282a36', pillLine: '#44475a', pillText: '#8be9fd', handle: '#282a36' };
+const C = { swing: '#6272a4', bg: '#21222c', grid: '#2b2d3a', grid2: '#383a4a', wall: '#f8f8f2', acc: '#bd93f9', bad: '#ff5555', pill: '#282a36', pillLine: '#44475a', pillText: '#8be9fd', handle: '#282a36' };
 const lum = (hex: string) => { const n = parseInt(hex.slice(1, 7), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
-const segDist = (p: Pt, a: Pt, b: Pt) => {
-  const l2 = dist(a, b) ** 2; if (!l2) return dist(p, a);
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2));
-  return dist(p, { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) });
+const projT = (p: Pt, a: Pt, b: Pt) => { const l2 = dist(a, b) ** 2; return l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2)) : 0; };
+const segDist = (p: Pt, a: Pt, b: Pt) => { const t = projT(p, a, b); return dist(p, { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) }); };
+// separating-axis test for two convex polygons
+const sat = (A: Pt[], B: Pt[]) => {
+  for (const P of [A, B]) for (let i = 0; i < P.length; i++) {
+    const a = P[i]!, b = P[(i + 1) % P.length]!, nx = a.y - b.y, ny = b.x - a.x, pr = (Q: Pt[]) => Q.map(q => q.x * nx + q.y * ny), pa = pr(A), pb = pr(B);
+    if (Math.max(...pa) <= Math.min(...pb) || Math.max(...pb) <= Math.min(...pa)) return false;
+  }
+  return true;
 };
 
 export class Editor {
@@ -50,6 +55,26 @@ export class Editor {
     return s;
   }
 
+  // ---- openings (doors / windows live on a wall, parametrised by distance from wall.a)
+  openings() { return this.p.plan.openings ??= []; }
+  wallOf(o: Opening) { return this.p.plan.walls.find(w => w.id === o.wall); }
+  geom(o: Opening) {
+    const w = this.wallOf(o); if (!w) return null;
+    const L = dist(w.a, w.b) || 1, u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, n = { x: -u.y * o.swing, y: u.x * o.swing };
+    const at = (t: number, s = 0) => ({ x: w.a.x + u.x * t + n.x * s, y: w.a.y + u.y * t + n.y * s });
+    const t0 = o.t - o.w / 2, t1 = o.t + o.w / 2, hp = at(o.hinge ? t1 : t0), dir = o.hinge ? -1 : 1;
+    const zone = [hp, at(o.hinge ? t0 : t1), at(o.hinge ? t0 : t1, o.w), at(o.hinge ? t1 : t0, o.w)]; // w×w square the leaf sweeps
+    return { w, L, u, n, at, t0, t1, hp, dir, zone };
+  }
+  addOpening(kind: 'door' | 'window', p: Pt) {
+    const wi = this.p.plan.walls.findIndex(w => segDist(p, w.a, w.b) < Math.max(this.wallT(), 10 / this.k)); if (wi < 0) return;
+    const w = this.p.plan.walls[wi]!; w.id ??= uid();
+    const o: Opening = { id: uid(), wall: w.id, t: Math.round(projT(p, w.a, w.b) * dist(w.a, w.b)), w: kind === 'door' ? 80 : 100, kind, hinge: 0, swing: 1 };
+    this.clampOpening(o); this.openings().push(o); this.sel = { kind: 'open', id: o.id }; this.changed();
+  }
+  clampOpening(o: Opening) { const w = this.wallOf(o); if (!w) return; const L = dist(w.a, w.b); o.w = Math.min(o.w, L); o.t = Math.max(o.w / 2, Math.min(L - o.w / 2, o.t)); }
+  selectedOpening(): Opening | undefined { const s = this.sel; return s?.kind === 'open' ? this.openings().find(o => o.id === s.id) : undefined; }
+
   // ---- public ops
   setTool(t: Tool) { this.tool = t; this.drawPts = []; this.scalePts = []; this.lenBuf = ''; this.sel = null; this.onSelect(); this.hint(); this.render(); }
   selected(): Item | undefined { const s = this.sel; return s?.kind === 'item' ? layout(this.p).items.find(i => i.id === s.id) : undefined; }
@@ -70,7 +95,8 @@ export class Editor {
   del() {
     const s = this.sel;
     if (s?.kind === 'item') { const l = layout(this.p); l.items = l.items.filter(i => i.id !== s.id); }
-    else if (s?.kind === 'wall') this.p.plan.walls.splice(s.i, 1);
+    else if (s?.kind === 'wall') { const [w] = this.p.plan.walls.splice(s.i, 1); this.p.plan.openings = this.openings().filter(o => o.wall !== w!.id); }
+    else if (s?.kind === 'open') this.p.plan.openings = this.openings().filter(o => o.id !== s.id);
     this.sel = null; this.changed();
   }
   dup() { const it = this.selected(); if (it) { const c = { ...it, id: uid(), x: it.x + 20, y: it.y + 20 }; layout(this.p).items.push(c); this.sel = { kind: 'item', id: c.id }; this.changed(); } }
@@ -95,6 +121,7 @@ export class Editor {
     if (e.button !== 0) return;
     if (this.tool === 'wall') { const s = this.snapWall(p); if (this.drawPts.length && dist(s, this.drawPts[0]!) < 1e-6 && this.drawPts.length > 2) return this.commitWall(s), this.endWall(); this.commitWall(s); return; }
     if (this.tool === 'scale') { this.scalePts.push(p); if (this.scalePts.length === 2) this.applyScale(); return this.render(); }
+    if (this.tool === 'door' || this.tool === 'window') return this.addOpening(this.tool, p);
     // select
     const items = layout(this.p).items;
     for (let i = items.length - 1; i >= 0; i--) {
@@ -106,6 +133,11 @@ export class Editor {
         items.push(...items.splice(i, 1)); // raise to top
         this.onSelect(); return this.render();
       }
+    }
+    for (const o of this.openings()) {
+      const g = this.geom(o); if (!g) continue;
+      const t = projT(p, g.w.a, g.w.b) * g.L;
+      if (segDist(p, g.w.a, g.w.b) < Math.max(this.wallT() / 2, 6 / this.k) && t >= g.t0 && t <= g.t1) { this.sel = { kind: 'open', id: o.id }; this.drag = { kind: 'open', o, dt: o.t - t }; this.onSelect(); return this.render(); }
     }
     const wi = this.p.plan.walls.findIndex(w => segDist(p, w.a, w.b) < Math.max(this.wallT() / 2, 6 / this.k));
     this.sel = wi >= 0 ? { kind: 'wall', i: wi } : null; this.onSelect();
@@ -124,10 +156,12 @@ export class Editor {
       let c = reach(it, t); c = reach(c, { x: t.x, y: c.y }); c = reach(c, { x: c.x, y: t.y });
       it.x = Math.round(c.x * 10) / 10; it.y = Math.round(c.y * 10) / 10;
       this.onSelect();
+    } else if (this.drag?.kind === 'open') {
+      const o = this.drag.o, g = this.geom(o); if (g) { o.t = Math.round(projT(p, g.w.a, g.w.b) * g.L + this.drag.dt); this.clampOpening(o); this.onSelect(); }
     }
     this.hint(); this.render();
   }
-  private up() { if (this.drag?.kind === 'item') this.onChange(); this.drag = null; }
+  private up() { if (this.drag?.kind === 'item' || this.drag?.kind === 'open') this.onChange(); this.drag = null; }
   private wheel(e: WheelEvent) {
     e.preventDefault();
     const r = this.cv.getBoundingClientRect();
@@ -151,9 +185,9 @@ export class Editor {
       case 'Delete': case 'Backspace': this.del(); break;
       case 'r': this.rotate(90); break; case 'R': this.rotate(-90); break;
       case 'q': this.rotate(-15); break; case 'e': this.rotate(15); break;
-      case 'd': if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.dup(); } break;
+      case 'd': if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.dup(); } else this.setTool('door'); break;
       case 'f': this.fit(); break;
-      case 'v': this.setTool('select'); break; case 'w': this.setTool('wall'); break;
+      case 'v': this.setTool('select'); break; case 'w': this.setTool('wall'); break; case 'n': this.setTool('window'); break;
       case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown':
         if (it) { const s = e.shiftKey ? 10 : 1; it.x += e.key === 'ArrowLeft' ? -s : e.key === 'ArrowRight' ? s : 0; it.y += e.key === 'ArrowUp' ? -s : e.key === 'ArrowDown' ? s : 0; e.preventDefault(); this.changed(); }
     }
@@ -167,7 +201,7 @@ export class Editor {
     if (Math.abs(dx) > Math.abs(dy)) { dx = Math.sign(dx) || 1; dy = 0; } else { dy = Math.sign(dy) || 1; dx = 0; }
     return { x: last.x + dx * len, y: last.y + dy * len };
   }
-  private commitWall(pt: Pt) { const last = this.drawPts.at(-1); if (last && dist(last, pt) > 0.5) this.p.plan.walls.push({ a: last, b: pt }); this.drawPts.push(pt); this.onChange(); }
+  private commitWall(pt: Pt) { const last = this.drawPts.at(-1); if (last && dist(last, pt) > 0.5) this.p.plan.walls.push({ id: uid(), a: last, b: pt }); this.drawPts.push(pt); this.onChange(); }
   private endWall() { this.drawPts = []; this.lenBuf = ''; this.hint(); this.render(); }
   private applyScale() {
     const [a, b] = this.scalePts as [Pt, Pt], im = this.p.plan.image; this.scalePts = [];
@@ -178,7 +212,9 @@ export class Editor {
   private hint() {
     const c = this.cur ? `${this.cur.x.toFixed(0)}, ${this.cur.y.toFixed(0)} cm` : '';
     const t = this.tool === 'wall' ? (this.drawPts.length ? `${this.lenBuf ? `length ${this.lenBuf}` : `${this.cur ? dist(this.cur, this.drawPts.at(-1)!).toFixed(0) : ''}`} cm · type a number + Enter · Shift = 90° · Esc to finish` : 'click to place the first corner')
-      : this.tool === 'scale' ? `click two points with a known distance (${this.scalePts.length}/2)` : this.selected() ? 'drag to move · R rotate · Del remove' : 'click an item to select · drag empty space to pan';
+      : this.tool === 'scale' ? `click two points with a known distance (${this.scalePts.length}/2)`
+      : this.tool === 'door' || this.tool === 'window' ? `click a wall to place a ${this.tool}`
+      : this.selected() ? 'drag to move · R rotate · Del remove' : this.selectedOpening() ? 'drag along the wall · Del remove' : 'click an item to select · drag empty space to pan';
     this.status(t, c);
   }
 
@@ -186,10 +222,13 @@ export class Editor {
   wallT() { return this.p.plan.wallT ?? 10; }
   private local(it: Pt, rot: number, q: Pt): Pt { const r = -rot * Math.PI / 180, dx = q.x - it.x, dy = q.y - it.y; return { x: dx * Math.cos(r) - dy * Math.sin(r), y: dx * Math.sin(r) + dy * Math.cos(r) }; }
   collides(it: Item, x: number, y: number, rot: number) { return this.hits(it, x, y, rot).length > 0; }
-  hits(it: Item, x: number, y: number, rot: number): number[] {
+  hits(it: Item, x: number, y: number, rot: number): string[] {
     const a = asset(this.p, it.asset); if (!a) return [];
     const hw = a.w / 2 + this.wallT() / 2 - 0.01, hd = a.d / 2 + this.wallT() / 2 - 0.01, c = { x, y };
-    return this.p.plan.walls.flatMap((w, i) => {
+    const r = rot * Math.PI / 180, cs = Math.cos(r), sn = Math.sin(r), e = 0.5; // item corners in world, slightly shrunk
+    const rect = ([-1, 1, 1, -1] as const).map((sx, i) => { const sy = i < 2 ? -1 : 1, lx = sx * (a.w / 2 - e), ly = sy * (a.d / 2 - e); return { x: x + lx * cs - ly * sn, y: y + lx * sn + ly * cs }; });
+    const doors = this.openings().flatMap(o => { const g = o.kind === 'door' ? this.geom(o) : null; return g && sat(rect, g.zone) ? [`o${o.id}`] : []; });
+    return doors.concat(this.p.plan.walls.flatMap((w, i) => {
       const p = this.local(c, rot, w.a), q = this.local(c, rot, w.b), dx = q.x - p.x, dy = q.y - p.y;
       let t0 = 0, t1 = 1; // Liang-Barsky clip of segment against [-hw,hw]x[-hd,hd]
       for (const [num, den] of [[p.x + hw, -dx], [hw - p.x, dx], [p.y + hd, -dy], [hd - p.y, dy]] as [number, number][]) {
@@ -197,8 +236,8 @@ export class Editor {
         const t = num / den; if (den < 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
         if (t0 > t1) return [];
       }
-      return [i];
-    });
+      return [`w${i}`];
+    }));
   }
   private snapToWalls(it: Item, t: Pt): Pt {
     const a = asset(this.p, it.asset); if (!a || it.rot % 90) return t;
@@ -249,6 +288,26 @@ export class Editor {
       const on = this.sel?.kind === 'wall' && this.sel.i === i;
       g.strokeStyle = on ? C.acc : C.wall; g.lineWidth = this.wallT(); g.beginPath(); g.moveTo(w.a.x, w.a.y); g.lineTo(w.b.x, w.b.y); g.stroke();
     });
+    const g_gap = (a: Pt, b: Pt) => { g.lineCap = 'butt'; g.strokeStyle = C.bg; g.lineWidth = this.wallT() + 0.6; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); };
+    const ctxDoor = (hp: Pt, tip: Pt, w: number, a0: number, a1: number, on: boolean) => {
+      g.strokeStyle = on ? C.acc : C.wall; g.lineWidth = Math.max(2 / k, 3); g.beginPath(); g.moveTo(hp.x, hp.y); g.lineTo(tip.x, tip.y); g.stroke(); // leaf, open 90°
+      g.strokeStyle = on ? C.acc : C.swing; g.lineWidth = 1.2 / k; g.setLineDash([4 / k, 4 / k]); g.beginPath();
+      let d = a1 - a0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+      g.arc(hp.x, hp.y, w, a0, a1, d < 0); g.stroke(); g.setLineDash([]);
+    };
+    const ctxWindow = (a: Pt, b: Pt, n: Pt, on: boolean) => {
+      g.strokeStyle = on ? C.acc : C.wall; g.lineWidth = Math.max(1.5 / k, 1.5); const s = this.wallT() / 4;
+      for (const f of [-s, s]) { g.beginPath(); g.moveTo(a.x + n.x * f, a.y + n.y * f); g.lineTo(b.x + n.x * f, b.y + n.y * f); g.stroke(); }
+      g.beginPath(); g.moveTo(a.x + n.x * s, a.y + n.y * s); g.lineTo(a.x - n.x * s, a.y - n.y * s); g.moveTo(b.x + n.x * s, b.y + n.y * s); g.lineTo(b.x - n.x * s, b.y - n.y * s); g.stroke();
+    };
+    // openings: cut the gap, then door leaf + swing arc / window panes
+    for (const o of this.openings()) {
+      const G = this.geom(o); if (!G) continue;
+      const on = this.sel?.kind === 'open' && this.sel.id === o.id, a = G.at(G.t0), b = G.at(G.t1);
+      g_gap(a, b);
+      if (o.kind === 'door') ctxDoor(G.hp, { x: G.hp.x + G.n.x * o.w, y: G.hp.y + G.n.y * o.w }, o.w, Math.atan2(G.n.y, G.n.x), Math.atan2(G.u.y * G.dir, G.u.x * G.dir), on);
+      else ctxWindow(a, b, G.n, on);
+    }
     // items
     for (const it of layout(this.p).items) {
       const a = asset(this.p, it.asset); if (!a) continue;

@@ -11,6 +11,7 @@ const I = {
   plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>', fit: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
   rotl: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/>', rotr: '<path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/>', copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5h10"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>', upload: '<path d="M12 16V4m-5 5l5-5 5 5M4 20h16"/>', download: '<path d="M12 4v12m-5-5l5 5 5-5M4 20h16"/>',
+  door: '<path d="M14 4v16H5V4zM5 20h14M11 12h.01"/><path d="M14 4l5 2v14"/>', window: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h16"/>', flip: '<path d="M12 3v18M8 7l-5 5 5 5M16 7l5 5-5 5"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>', image: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/>', reset: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/>',
 };
 const svg = (d: string) => { const s = h('span'); s.innerHTML = `<svg viewBox="0 0 24 24">${d}</svg>`; return s.firstElementChild as SVGElement; };
@@ -51,11 +52,11 @@ export function buildUI(top: HTMLElement, left: HTMLElement, right: HTMLElement,
       btn('', () => { if (confirm('Erase everything? Export first if unsure.')) { setProject(blank()); ed.changed(); ed.fit(); } }, { icon: I.reset, cls: 'ghost icon', title: 'Reset project' })));
 
   // ============ floating toolbar / zoom / status ============
-  const tools: [Tool, string, string][] = [['select', I.cursor, 'Select  V'], ['wall', I.wall, 'Draw walls  W'], ['scale', I.ruler, 'Calibrate image scale']];
+  const tools: [Tool, string, string][] = [['select', I.cursor, 'Select  V'], ['wall', I.wall, 'Draw walls  W'], ['door', I.door, 'Door  D'], ['window', I.window, 'Window  N'], ['scale', I.ruler, 'Calibrate image scale']];
   const toolBtns = tools.map(([t, ic, tip]) => h('button', { className: 'tool', 'data-tip': tip, on: { click: () => ed.setTool(t) } }, svg(ic)));
   toolBtns.forEach((b, i) => b.setAttribute('data-tip', tools[i]![2]));
   const syncTools = () => toolBtns.forEach((b, i) => b.classList.toggle('on', tools[i]![0] === ed.tool));
-  main.querySelector('#toolbar')!.append(...toolBtns.slice(0, 2), h('span', { className: 'sep' }), toolBtns[2]!);
+  main.querySelector('#toolbar')!.append(toolBtns[0]!, h('span', { className: 'sep' }), ...toolBtns.slice(1, 4), h('span', { className: 'sep' }), toolBtns[4]!);
 
   const pct = h('span', { className: 'pct' });
   ed.onView = () => { pct.textContent = `${Math.round(ed.k * 100)} %`; };
@@ -63,7 +64,7 @@ export function buildUI(top: HTMLElement, left: HTMLElement, right: HTMLElement,
 
   const st = { mode: h('b'), hint: h('span'), c: h('span', { className: 'c' }) };
   main.querySelector('#status')!.append(st.mode, st.hint, st.c);
-  ed.status = (hint, coords) => { st.mode.textContent = { select: 'Select', wall: 'Wall', scale: 'Scale' }[ed.tool]; st.hint.textContent = hint; st.c.textContent = coords; };
+  ed.status = (hint, coords) => { st.mode.textContent = ed.tool[0]!.toUpperCase() + ed.tool.slice(1); st.hint.textContent = hint; st.c.textContent = coords; };
 
   // ============ item dialog ============
   const f = { name: h('input', { placeholder: 'e.g. Sofa' }), w: h('input', { type: 'number', min: '1' }), d: h('input', { type: 'number', min: '1' }), h: h('input', { type: 'number', min: '0' }), color: h('input', { type: 'color' }), img: '' };
@@ -109,9 +110,17 @@ export function buildUI(top: HTMLElement, left: HTMLElement, right: HTMLElement,
         field('Rotation', h('div', { style: 'display:flex;gap:8px' }, Object.assign(numIn(it.rot, v => { it.rot = v; ed.changed(); }, '°', 15), { style: 'flex:1' }),
           h('div', { className: 'seg' }, btn('', () => ed.rotate(-90), { icon: I.rotl, cls: 'icon', title: 'Rotate −90°  Shift+R' }), btn('', () => ed.rotate(90), { icon: I.rotr, cls: 'icon', title: 'Rotate +90°  R' })))),
         h('div', { className: 'g2' }, btn('Duplicate', () => ed.dup(), { icon: I.copy }), btn('Delete', () => ed.del(), { icon: I.trash, cls: 'danger' })));
+    } else if (ed.sel?.kind === 'open') {
+      const o = ed.selectedOpening()!, G = ed.geom(o), door = o.kind === 'door';
+      insp.replaceChildren(h('div', {}, h('div', { className: 'title', textContent: door ? 'Door' : 'Window' }), h('div', { className: 'sub', textContent: `on a ${G ? G.L.toFixed(0) : '?'} cm wall` })),
+        h('div', { className: 'g2' }, field('Width', numIn(o.w, v => { o.w = Math.max(20, v || 20); ed.clampOpening(o); ed.changed(); })), field('From wall start', numIn(o.t, v => { o.t = v; ed.clampOpening(o); ed.changed(); }))),
+        ...(door ? [h('div', { className: 'g2' }, btn('Hinge side', () => { o.hinge = o.hinge ? 0 : 1; ed.changed(); }, { icon: I.flip }), btn('Swing side', () => { o.swing = o.swing === 1 ? -1 : 1; ed.changed(); }, { icon: I.rotr }))] : []),
+        btn(`Delete ${o.kind}`, () => ed.del(), { icon: I.trash, cls: 'danger' }));
     } else if (ed.sel?.kind === 'wall') {
       const w = p().plan.walls[ed.sel.i]!;
-      insp.replaceChildren(h('div', {}, h('div', { className: 'title', textContent: 'Wall' }), h('div', { className: 'sub', textContent: `${Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y).toFixed(0)} cm` })), btn('Delete wall', () => ed.del(), { icon: I.trash, cls: 'danger' }));
+      insp.replaceChildren(h('div', {}, h('div', { className: 'title', textContent: 'Wall' }), h('div', { className: 'sub', textContent: `${Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y).toFixed(0)} cm` })),
+        h('div', { className: 'g2' }, btn('Add door', () => { const m = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }; ed.addOpening('door', m); }, { icon: I.door }), btn('Add window', () => { const m = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }; ed.addOpening('window', m); }, { icon: I.window })),
+        btn('Delete wall', () => ed.del(), { icon: I.trash, cls: 'danger' }));
     } else insp.replaceChildren(h('div', { className: 'hint', innerHTML: kbd('Select an item or wall to edit it.<br><br>[V] select · [W] draw walls · [F] fit view<br>Drag empty space or [Alt]+drag to pan, scroll to zoom.') }));
   };
 
@@ -130,6 +139,7 @@ export function buildUI(top: HTMLElement, left: HTMLElement, right: HTMLElement,
       btn('Clear all walls', () => { if (confirm('Delete all walls?')) { p().plan.walls = []; ed.changed(); } }, { cls: 'danger', icon: I.trash })),
     h('div', { className: 'sec' }, h('h3', { textContent: 'How to' }), h('div', { className: 'hint', innerHTML: kbd(
       '<b>Walls</b> — press [W], click corners. Type a length and [Enter] for exact cm. [Shift] locks to 90°. Click the first corner to close.<br><br>' +
+      '<b>Doors & windows</b> — [D] / [N], click a wall. Drag along the wall; set width, hinge and swing side in the inspector. Furniture keeps out of the door swing.<br><br>' +
       '<b>Plan image</b> — upload, then click two points with a known distance and enter it.<br><br>' +
       '<b>Furniture</b> — drag from the list. Items stop at walls and snap to them. [R] rotates 90°, [Q]/[E] 15°, arrows nudge, [Ctrl]+[D] duplicates, [Del] removes.') })));
 

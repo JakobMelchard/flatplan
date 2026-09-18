@@ -9,7 +9,8 @@ npm i && npm run dev
 ## Floor plan
 - **Wall (W)**: click points. Type digits + `Enter` → exact segment length along cursor axis. `Shift` ortho, `Ctrl` no grid snap. Click first point / `Esc` / dblclick ends.
 - **Upload plan image**: then click 2 points of known distance, enter cm. Image rescaled around first point. Opacity slider; trace walls over it or just place furniture on the scan.
-- Click wall → `Del`.
+- Click wall → `Del` (removes its openings too).
+- **Doors / windows**: `D` / `N`, click a wall (or select wall → Add door/window). Drag along wall; inspector: width, offset from wall start, hinge side, swing side. Door swing zone (w×w square) blocks furniture like a wall. Stored as `Opening{wall:id, t, w, kind, hinge, swing}` — walls carry stable `id`s.
 
 ## Furniture
 - Form: name, W×D×H, color, optional top-down PNG/SVG (downscaled to 600px). H stored for future 3D.

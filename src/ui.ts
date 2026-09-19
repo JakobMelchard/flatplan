@@ -12,6 +12,7 @@ const I = {
   rotl: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/>', rotr: '<path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/>', copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5h10"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>', upload: '<path d="M12 16V4m-5 5l5-5 5 5M4 20h16"/>', download: '<path d="M12 4v12m-5-5l5 5 5-5M4 20h16"/>',
   door: '<path d="M14 4v16H5V4zM5 20h14M11 12h.01"/><path d="M14 4l5 2v14"/>', window: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h16"/>', flip: '<path d="M12 3v18M8 7l-5 5 5 5M16 7l5 5-5 5"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5M12 17h.01"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>', image: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/>', reset: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/>',
 };
 const svg = (d: string) => { const s = h('span'); s.innerHTML = `<svg viewBox="0 0 24 24">${d}</svg>`; return s.firstElementChild as SVGElement; };
@@ -136,12 +137,23 @@ export function buildUI(top: HTMLElement, left: HTMLElement, right: HTMLElement,
   right.append(insp,
     h('div', { className: 'sec' }, h('h3', { textContent: 'Floor plan' }), imgRow, field('Image opacity', opacity),
       field('Wall thickness', numIn(p().plan.wallT ?? 10, v => { p().plan.wallT = v || 10; ed.changed(); })),
-      btn('Clear all walls', () => { if (confirm('Delete all walls?')) { p().plan.walls = []; ed.changed(); } }, { cls: 'danger', icon: I.trash })),
-    h('div', { className: 'sec' }, h('h3', { textContent: 'How to' }), h('div', { className: 'hint', innerHTML: kbd(
-      '<b>Walls</b> — press [W], click corners. Type a length and [Enter] for exact cm. [Shift] locks to 90°. Click the first corner to close.<br><br>' +
-      '<b>Doors & windows</b> — [D] / [N], click a wall. Drag along the wall; set width, hinge and swing side in the inspector. Furniture keeps out of the door swing.<br><br>' +
-      '<b>Plan image</b> — upload, then click two points with a known distance and enter it.<br><br>' +
-      '<b>Furniture</b> — drag from the list. Items stop at walls and snap to them. [R] rotates 90°, [Q]/[E] 15°, arrows nudge, [Ctrl]+[D] duplicates, [Del] removes.') })));
+      btn('Clear all walls', () => { if (confirm('Delete all walls?')) { p().plan.walls = []; ed.changed(); } }, { cls: 'danger', icon: I.trash })));
+
+  // ============ help overlay (? button / ? key) ============
+  const row = (k: string, d: string) => h('div', { className: 'hrow' }, h('span', { innerHTML: kbd(k) }), h('span', { innerHTML: kbd(d) }));
+  const col = (title: string, ...rows: HTMLElement[]) => h('div', { className: 'hcol' }, h('h3', { textContent: title }), ...rows);
+  const help = h('dialog', { className: 'help' }, h('div', { className: 'dh' }, 'flatplan — shortcuts & how-to', btn('', () => help.close(), { icon: I.x, cls: 'ghost icon' })),
+    h('div', { className: 'hgrid' },
+      col('Tools', row('[V]', 'Select / move'), row('[W]', 'Draw walls'), row('[D]', 'Place door on a wall'), row('[N]', 'Place window on a wall'), row('[Esc]', 'Finish / deselect')),
+      col('Walls', row('click', 'Place corner; click first corner to close'), row('[0-9] [Enter]', 'Exact segment length in cm'), row('[Shift]', 'Lock to 90°'), row('[Ctrl]', 'Disable grid snap'), row('[Del]', 'Remove selected wall (and its openings)')),
+      col('Furniture', row('drag', 'Move — stops at walls and door swings, snaps to wall faces'), row('[R] / [Shift]+[R]', 'Rotate ±90°'), row('[Q] / [E]', 'Rotate ±15°'), row('[↑][↓][←][→]', 'Nudge 1 cm ([Shift] = 10)'), row('[Ctrl]+[D]', 'Duplicate'), row('[Del]', 'Remove')),
+      col('Doors & windows', row('drag', 'Slide along the wall'), row('inspector', 'Width, offset, hinge side, swing side'), row('', 'Door swing zone is solid for furniture')),
+      col('View', row('wheel', 'Zoom at cursor'), row('drag empty / [Alt]+drag', 'Pan'), row('[F]', 'Fit everything')),
+      col('Plan image', row('Upload plan', 'Then click two points with a known distance and enter it'), row('opacity', 'Fade the scan under your walls'), row('Export / Import', 'Whole project as JSON incl. images'))),
+    h('div', { className: 'hint', style: 'padding:0 20px 18px', innerHTML: kbd('Press [?] anytime to open this.') }));
+  document.body.append(help);
+  top.querySelector('.hgroup')!.prepend(btn('', () => help.open ? help.close() : help.showModal(), { icon: I.help, cls: 'ghost icon', title: 'Help  ?' }));
+  window.addEventListener('keydown', e => { if (e.key === '?' && !(e.target as HTMLElement).matches('input,textarea')) { e.preventDefault(); help.open ? help.close() : help.showModal(); } });
 
   // ============ wiring ============
   const refresh = () => { renderTabs(); renderCards(); renderSel(); renderPlan(); syncTools(); ed.onView(); };

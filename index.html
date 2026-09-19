@@ -105,6 +105,15 @@
   dialog .dh { display:flex; align-items:center; justify-content:space-between; font-weight:600; font-size:15px }
   dialog .df { display:flex; gap:8px; justify-content:flex-end; margin-top:4px }
   dialog .df .btn.danger { margin-right:auto }
+  dialog.help { width:min(880px, calc(100vw - 48px)) }
+  dialog.help .dh { padding:18px 20px 6px }
+  .hgrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:18px 28px; padding:12px 20px 16px }
+  .hcol { display:flex; flex-direction:column; gap:8px }
+  .hcol h3 { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--acc) }
+  .hrow { display:grid; grid-template-columns:118px 1fr; gap:10px; font-size:12.5px; color:var(--dim); align-items:start }
+  .hrow > span:first-child { color:var(--fg); font-size:11.5px; line-height:1.7 }
+  .hrow kbd { display:inline-block; min-width:18px; padding:0 5px; border:1px solid var(--line2); border-bottom-width:2px; border-radius:4px; font:11px ui-monospace,Menlo,monospace; color:var(--fg); background:var(--panel2); text-align:center }
+  @media (max-width:900px) { .hgrid { grid-template-columns:1fr 1fr } }
 </style>
 </head>
 <body>

@@ -2,7 +2,8 @@
 
 2D furniture arrangement planner. Canvas editor for walls, doors, windows and
 furniture, all lengths in cm. Static site, no runtime deps, state in
-localStorage plus JSON export/import. Org rules: `.agents/AGENTS.org.md`.
+localStorage plus JSON export/import. Org rules: `JakobMelchard/.agents`
+(loaded from the checkout, not vendored).
 
 ## Commands
 

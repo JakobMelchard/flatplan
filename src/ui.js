@@ -986,11 +986,15 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         row('Pencil', 'Once used, only the Pencil places points; fingers pan and zoom'),
         row('handle', 'Drag the dot above an item to rotate (15° steps)'),
         row('two-finger tap', 'Undo; the pill that appears offers Redo (also the toolbar arrows)'),
-        row('multi-select button', 'Next to Select: taps add / remove items, drag draws a box'),
+        row(
+          'multi-select button',
+          'Next to Select: taps add / remove furniture, walls, doors; drag draws a box',
+        ),
         row(
           'long-press',
-          'Same without the button: on an item toggles it, on empty space starts a box',
+          'Same without the button: on something toggles it, on empty space starts a box',
         ),
+        row('selected wall', 'Drag it to move; walls joined to it stretch along'),
       ),
       col(
         'Walls',

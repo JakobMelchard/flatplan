@@ -43,6 +43,8 @@ const I = {
   reset: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/>',
   undo: '<path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  redo: '<path d="M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3"/>',
+  all: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
   left: '<path d="M4 5v14M20 5v14M9 5h6v14H9z"/>',
   right: '<path d="M4 5h16v14H4zM15 5v14"/>',
@@ -321,8 +323,18 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
     ),
   )
   toolBtns.forEach((b, i) => b.setAttribute('data-tip', tools[i][2]))
-  const syncTools = () =>
+  /** @param {string} icon @param {() => void} fn @param {string} tip */
+  const toolBtn = (icon, fn, tip) =>
+    h('button', { className: 'tool', type: 'button', title: tip, on: { click: fn } }, svg(icon))
+  const undoBtn = toolBtn(I.undo, () => ed.undo(), 'Undo  Ctrl+Z · two-finger tap')
+  const redoBtn = toolBtn(I.redo, () => ed.redo(), 'Redo  Ctrl+Shift+Z · three-finger tap')
+  undoBtn.setAttribute('data-tip', 'Undo')
+  redoBtn.setAttribute('data-tip', 'Redo')
+  const syncTools = () => {
     toolBtns.forEach((b, i) => b.classList.toggle('on', tools[i][0] === ed.tool))
+    undoBtn.disabled = !ed.hist.undos.length
+    redoBtn.disabled = !ed.hist.redos.length
+  }
   const $ = (/** @type {string} */ s) => /** @type {HTMLElement} */ (main.querySelector(s))
   $('#toolbar').append(
     toolBtns[0],
@@ -330,6 +342,9 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
     ...toolBtns.slice(1, 4),
     h('span', { className: 'sep' }),
     toolBtns[4],
+    h('span', { className: 'sep' }),
+    undoBtn,
+    redoBtn,
   )
 
   const pct = h('span', { className: 'pct' })
@@ -375,7 +390,7 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
     })
   const sep = () => h('span', { className: 'sep' })
   const renderActions = () => {
-    const it = ed.selected()
+    const n = ed.selectedItems().length
     const o = ed.selectedOpening()
     const s = ed.sel
     /** @type {HTMLElement[]} */
@@ -392,8 +407,15 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         btn('', () => ed.undoPoint(), { icon: I.undo, cls: 'icon', title: 'Undo last corner' }),
         btn('Done', () => ed.endWall(), { icon: I.check, cls: 'pri' }),
       ]
-    } else if (it)
+    } else if (n)
       kids = [
+        ...(n > 1 ? [h('span', { className: 'count', textContent: `${n}` })] : []),
+        btn('', () => ed.selectAll(), {
+          icon: I.all,
+          cls: 'icon',
+          title: 'Select all items  Ctrl+A',
+        }),
+        sep(),
         btn('90', () => ed.rotate(-90), { icon: I.rotl, title: 'Rotate −90°  Shift+R' }),
         btn('15', () => ed.rotate(-15), { icon: I.rotl, title: 'Rotate −15°  Q' }),
         btn('15', () => ed.rotate(15), { icon: I.rotr, title: 'Rotate +15°  E' }),
@@ -708,6 +730,22 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         ),
         btn('Edit item', () => openDlg(a), { icon: I.edit }),
       )
+    } else if (ed.selectedItems().length > 1) {
+      const its = ed.selectedItems()
+      const bad = its.filter((i) => ed.collides(i, i.x, i.y, i.rot)).length
+      insp.replaceChildren(
+        h(
+          'div',
+          {},
+          h('div', { className: 'title', textContent: `${its.length} items` }),
+          h('div', {
+            className: `sub ${bad ? 'warn' : ''}`,
+            textContent: bad
+              ? `${bad} overlap a wall`
+              : 'Move, rotate, duplicate or delete together',
+          }),
+        ),
+      )
     } else if (ed.sel?.kind === 'open') {
       const o = /** @type {import('./model.js').Opening} */ (ed.selectedOpening())
       const G = ed.geom(o)
@@ -856,6 +894,8 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         row('pinch', 'Zoom and pan with two fingers'),
         row('Pencil', 'Once used, only the Pencil places points; fingers pan and zoom'),
         row('handle', 'Drag the dot above an item to rotate (15° steps)'),
+        row('two / three-finger tap', 'Undo / redo'),
+        row('long-press', 'On an item: add to / remove from selection. On empty space: drag a box'),
       ),
       col(
         'Walls',
@@ -873,6 +913,9 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         row('[Q] / [E]', 'Rotate ±15°'),
         row('[↑][↓][←][→]', 'Nudge 1 cm ([Shift] = 10)'),
         row('[Ctrl]+[D] / [Del]', 'Duplicate / remove'),
+        row('[Shift]+click / drag', 'Add to selection / box select (Pencil: drag on empty space)'),
+        row('[Ctrl]+[A]', 'Select all items'),
+        row('[Ctrl]+[Z] / [Shift]+[Ctrl]+[Z]', 'Undo / redo'),
       ),
       col(
         'Doors & windows',

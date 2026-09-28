@@ -17,6 +17,13 @@ The service worker (offline use, install) only registers on HTTPS or localhost.
   else pans. Two fingers pinch-zoom and pan; a second finger mid-drag cancels the drag.
 - Once the Pencil has been used, only the Pencil places wall corners / doors / scale points;
   fingers just pan and zoom. Contacts are ignored while the Pencil is down (palm rejection).
+- Undo / redo: two-finger / three-finger tap, the toolbar arrows, or `Ctrl/Cmd+Z` /
+  `Shift+Ctrl/Cmd+Z` / `Ctrl+Y`. History covers every project change (not the view), keeps 200
+  steps and merges changes less than 0.4 s apart; it lasts for the session.
+- Multi-select: long-press an item to add / remove it, long-press empty space and drag a box,
+  or drag a box with the Pencil. Mouse: `Shift`/`Cmd`+click, `Shift`+drag. `Ctrl+A` all.
+  A multi-selection moves as one (stops when any item would hit a wall), rotates around its
+  centre, duplicates and deletes together.
 - Selected item: drag the dot above it to rotate (15° steps, `Ctrl` free). A bar at the bottom
   shows the actions for the selection (rotate, duplicate, delete, hinge / swing, add door).
 - While drawing walls the bar takes an exact length + direction arrow, undo corner, done.

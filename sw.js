@@ -1,7 +1,7 @@
 // Offline support: network first so a deploy shows up on the next load, cache as fallback.
 /** @type {any} ServiceWorkerGlobalScope; the webworker lib clashes with dom in one tsconfig */
 const sw = self
-const CACHE = 'flatplan-v1'
+const CACHE = 'flatplan-v2'
 const SHELL = [
   './',
   'index.html',
@@ -14,6 +14,7 @@ const SHELL = [
   'src/model.js',
   'src/store.js',
   'src/geom.js',
+  'src/history.js',
   'src/editor.js',
   'src/ui.js',
 ]

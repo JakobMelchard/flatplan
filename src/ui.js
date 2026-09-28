@@ -1,5 +1,6 @@
 import { layout, asset, uid, blank } from './model.js'
 import { exportFile, readFile, shrinkImage } from './store.js'
+import { startDebugLog } from './debug.js'
 
 /** @typedef {import('./model.js').Project} Project */
 /** @typedef {import('./model.js').Asset} Asset */
@@ -382,17 +383,54 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
   // after an undo / redo: say what happened and offer the opposite, so redo is findable
   const toast = $('#toast')
   let toastT = 0
-  ed.onHistory = (did) => {
-    toast.replaceChildren(
-      h('span', { textContent: did === 'undo' ? 'Undone' : 'Redone' }),
-      did === 'undo'
-        ? btn('Redo', () => ed.redo(), { icon: I.redo, cls: 'ghost' })
-        : btn('Undo', () => ed.undo(), { icon: I.undo, cls: 'ghost' }),
-    )
+  /**
+   * @param {string} text
+   * @param {HTMLElement} action
+   * @param {number} [ms] auto-hide after, 0 = stay
+   */
+  const notify = (text, action, ms = 4000) => {
+    toast.replaceChildren(h('span', { textContent: text }), action)
     toast.hidden = false
     clearTimeout(toastT)
-    toastT = window.setTimeout(() => (toast.hidden = true), 4000)
+    if (ms) toastT = window.setTimeout(() => (toast.hidden = true), ms)
   }
+  ed.onHistory = (did) =>
+    did === 'undo'
+      ? notify(
+          'Undone',
+          btn('Redo', () => ed.redo(), { icon: I.redo, cls: 'ghost' }),
+        )
+      : notify(
+          'Redone',
+          btn('Undo', () => ed.undo(), { icon: I.undo, cls: 'ghost' }),
+        )
+
+  // An app opened from the home screen resumes the old page instead of reloading, so check the
+  // served commit when it comes back to the foreground and offer a reload after a deploy.
+  const ver = h('div', { className: 'hint' })
+  /** @type {string | null} */
+  let running = null
+  const checkVersion = async () => {
+    try {
+      /** @type {{ version: string, debug: boolean }} */
+      const v = await (await fetch('version', { cache: 'no-store' })).json()
+      if (running === null) {
+        running = v.version
+        ver.textContent = `Version ${v.version || 'unknown'}`
+        if (v.debug) startDebugLog(ed, v.version)
+      } else if (v.version && v.version !== running)
+        notify(
+          'Update available',
+          btn('Reload', () => location.reload(), { icon: I.reset, cls: 'ghost' }),
+          0,
+        )
+    } catch {} // offline, or a static host without /version
+  }
+  checkVersion()
+  document.addEventListener(
+    'visibilitychange',
+    () => document.visibilityState === 'visible' && checkVersion(),
+  )
 
   const pct = h('span', { className: 'pct' })
   ed.onView = () => (pct.textContent = `${Math.round(ed.k * 100)} %`)
@@ -994,6 +1032,7 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
       { className: 'hint foot' },
       h('span', { innerHTML: kbd('Press [?] anytime to open this. ') }),
       h('a', { href: 'docs/', target: '_blank', textContent: 'Full documentation' }),
+      ver,
     ),
   )
   body.append(help)

@@ -1,7 +1,11 @@
-// Dev server: static files, no build step. PORT (default 5173), BIND (default 127.0.0.1;
-// 0.0.0.0 to open it from the iPad over the LAN / tailnet).
+// Static server, no build step. PORT (default 5173), BIND (default 127.0.0.1; 0.0.0.0 to open
+// it from the iPad over the LAN / tailnet).
+// GET /version: the served git commit, so the app can offer a reload after a deploy.
+// POST /log: when CLIENT_LOG names a file, appends the body (client debug events) to it; the
+// app only sends them when /version reports debug.
 import { createServer } from 'node:http'
-import { readFile } from 'node:fs/promises'
+import { appendFile, readFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
 import { extname, join, normalize } from 'node:path'
 
 const root = import.meta.dirname
@@ -16,8 +20,27 @@ const types = {
 }
 const port = Number(process.env.PORT ?? 5173)
 const host = process.env.BIND ?? '127.0.0.1'
+const clientLog = process.env.CLIENT_LOG
+
+/** @returns {Promise<string>} short sha + subject of the served checkout, '' outside git */
+const version = () =>
+  new Promise((res) =>
+    execFile('git', ['log', '-1', '--format=%h %s'], { cwd: root }, (err, out) =>
+      res(err ? '' : out.trim()),
+    ),
+  )
 
 createServer(async (req, res) => {
+  if (req.url === '/version')
+    return res
+      .writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+      .end(JSON.stringify({ version: await version(), debug: !!clientLog }))
+  if (req.url === '/log' && req.method === 'POST') {
+    let body = ''
+    for await (const c of req) if ((body += c).length > 1 << 16) break
+    if (clientLog) await appendFile(clientLog, body.trimEnd() + '\n').catch(() => {})
+    return res.writeHead(204).end()
+  }
   const path = normalize(decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)).replace(
     /^(\.\.[/\\])+/,
     '',

@@ -14,7 +14,10 @@ export function startDebugLog(ed, version) {
   const t0 = performance.now()
   /** @param {Record<string, unknown>} o */
   const log = (o) => buf.push(JSON.stringify({ t: Math.round(performance.now() - t0), ...o }))
+  const r1 = (/** @type {number} */ n) => Math.round(n)
   const state = () => ({
+    items: ed.p.layouts.find((l) => l.id === ed.p.current)?.items.length,
+    walls: ed.p.plan.walls.length,
     tool: ed.tool,
     multi: ed.multi,
     pen: ed.penSeen,
@@ -54,6 +57,20 @@ export function startDebugLog(ed, version) {
           moves,
         })
         moves = 0
+        // marquee geometry, before the editor clears the drag on release
+        const d = ed.drag
+        if (d?.kind === 'marquee' && type !== 'pointerdown') {
+          const its = ed.p.layouts.find((l) => l.id === ed.p.current)?.items ?? []
+          log({
+            ev: 'marquee',
+            a: [r1(d.a.x), r1(d.a.y)],
+            b: [r1(d.b.x), r1(d.b.y)],
+            view: { k: +ed.k.toFixed(3), ox: r1(ed.ox), oy: r1(ed.oy) },
+            inRect: ed.inRect(d.a, d.b).length,
+            items: its.slice(0, 12).map((i) => [i.asset, r1(i.x), r1(i.y), i.rot]),
+            assets: ed.p.assets.map((a) => [a.id, a.w, a.d]),
+          })
+        }
         // state after the editor handled it
         setTimeout(() => log({ ev: `${type}:after`, ...state() }), 0)
       },

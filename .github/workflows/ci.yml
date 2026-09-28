@@ -9,6 +9,6 @@ jobs:
   ci:
     uses: JakobMelchard/.github/.github/workflows/node.yml@main
     with:
-      lint-cmd: ""
+      lint-cmd: ''
       check-cmd: npx tsc --noEmit
       test-cmd: npm run build

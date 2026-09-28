@@ -24,7 +24,7 @@ createServer(async (req, res) => {
   const file = join(root, path.endsWith('/') ? `${path}index.html` : path)
   if (
     !file.startsWith(root) ||
-    /[/\\](\.[^/\\]*|node_modules|test|scripts)([/\\]|$)/.test(file.slice(root.length))
+    /[/\\](\.[^/\\]*|node_modules|test)([/\\]|$)/.test(file.slice(root.length))
   )
     return res.writeHead(404).end()
   try {

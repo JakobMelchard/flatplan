@@ -88,7 +88,8 @@ reload shows it).
 - `~/Workspaces/JakobMelchard/flatplan.tree/worktrees/prd`: detached worktree that is served.
 - `com.lilfeelz.flatplan` (LaunchAgent): `node serve.js` from that worktree on `127.0.0.1:5180`,
   behind `tailscale serve --https=5180 http://127.0.0.1:5180`.
-- `com.lilfeelz.flatplan.pull` (LaunchAgent, every 60 s): `scripts/pull.sh <prd> <branch>` fetches
-  and checks out the branch tip. Log: `~/Data/flatplan/logs/pull.log`.
+- `com.lilfeelz.flatplan.pull` (LaunchAgent, every 60 s): an inline `bash -c` that fetches the
+  branch and checks out its tip when it moved (inline so it never depends on the checkout it
+  updates). Log: `~/Data/flatplan/logs/pull.log`.
 
 To deploy a different branch, change the branch argument in the `.pull` plist and reload it.

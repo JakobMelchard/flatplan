@@ -81,15 +81,12 @@ Model already 3D-ready: `Asset.h`, `Item.{x,y,rot}`, walls as segments. Add `src
 
 ## Hosting (mimi)
 
-Served on the tailnet at `https://mimi.mermaid-dory.ts.net:5180`. Deploys are pull-based: push or
-merge, and within a minute the site runs the new commit (the service worker is network-first, so a
-reload shows it).
+Served on the tailnet at `https://mimi.mermaid-dory.ts.net:5180` from
+`~/Workspaces/JakobMelchard/flatplan.tree/worktrees/prd`, a detached worktree of the mimi clone.
+`com.lilfeelz.flatplan` (LaunchAgent) runs `node serve.js` there on `127.0.0.1:5180`, behind
+`tailscale serve --https=5180 http://127.0.0.1:5180`.
 
-- `~/Workspaces/JakobMelchard/flatplan.tree/worktrees/prd`: detached worktree that is served.
-- `com.lilfeelz.flatplan` (LaunchAgent): `node serve.js` from that worktree on `127.0.0.1:5180`,
-  behind `tailscale serve --https=5180 http://127.0.0.1:5180`.
-- `com.lilfeelz.flatplan.pull` (LaunchAgent, every 60 s): an inline `bash -c` that fetches the
-  branch and checks out its tip when it moved (inline so it never depends on the checkout it
-  updates). Log: `~/Data/flatplan/logs/pull.log`.
-
-To deploy a different branch, change the branch argument in the `.pull` plist and reload it.
+Deploys come from git hooks in the mimi clone's `.git/hooks` (local, not committed, since only
+that host has the worktree): `pre-push` checks out `main` in the worktree when `main` is pushed,
+`post-merge` does it after `git pull` on `main` (PRs merged on GitHub). Reload the app to pick it
+up (the service worker is network-first).

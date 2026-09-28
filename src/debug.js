@@ -21,7 +21,7 @@ export function startDebugLog(ed, version) {
     tool: ed.tool,
     multi: ed.multi,
     pen: ed.penSeen,
-    sel: ed.sel?.kind === 'items' ? ed.sel.ids.length : (ed.sel?.kind ?? null),
+    sel: ed.sel ? `${ed.sel.items.length}/${ed.sel.walls.length}/${ed.sel.opens.length}` : null,
     drag: ed.drag?.kind ?? null,
     ptrs: ed.ptrs.size,
   })
@@ -66,7 +66,7 @@ export function startDebugLog(ed, version) {
             a: [r1(d.a.x), r1(d.a.y)],
             b: [r1(d.b.x), r1(d.b.y)],
             view: { k: +ed.k.toFixed(3), ox: r1(ed.ox), oy: r1(ed.oy) },
-            inRect: ed.inRect(d.a, d.b).length,
+            inRect: Object.values(ed.inRect(d.a, d.b)).map((l) => l.length),
             items: its.slice(0, 12).map((i) => [i.asset, r1(i.x), r1(i.y), i.rot]),
             assets: ed.p.assets.map((a) => [a.id, a.w, a.d]),
           })

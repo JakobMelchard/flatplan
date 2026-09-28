@@ -61,3 +61,47 @@ test('migrate fills wall ids and openings', () => {
   assert.ok(m.plan.walls[0].id)
   assert.deepEqual(m.plan.openings, [])
 })
+
+test('sat: a wall segment against a selection box', () => {
+  const b = box(0, 0, 100)
+  assert.equal(
+    sat(
+      [
+        { x: -50, y: 50 },
+        { x: 150, y: 50 },
+      ],
+      b,
+    ),
+    true,
+  ) // crosses
+  assert.equal(
+    sat(
+      [
+        { x: 20, y: 20 },
+        { x: 30, y: 30 },
+      ],
+      b,
+    ),
+    true,
+  ) // inside
+  assert.equal(
+    sat(
+      [
+        { x: 120, y: -10 },
+        { x: 200, y: 90 },
+      ],
+      b,
+    ),
+    false,
+  ) // beside
+  assert.equal(
+    sat(
+      [
+        { x: 70, y: -20 },
+        { x: 120, y: 30 },
+      ],
+      b,
+    ),
+    true,
+  ) // clips a corner
+})

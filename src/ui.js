@@ -475,9 +475,9 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
     })
   const sep = () => h('span', { className: 'sep' })
   const renderActions = () => {
-    const n = ed.selectedItems().length
+    const n = ed.count()
     const o = ed.selectedOpening()
-    const s = ed.sel
+    const w = ed.selectedWall()
     /** @type {HTMLElement[]} */
     let kids = []
     if (ed.tool === 'wall' && ed.drawPts.length) {
@@ -492,24 +492,7 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         btn('', () => ed.undoPoint(), { icon: I.undo, cls: 'icon', title: 'Undo last corner' }),
         btn('Done', () => ed.endWall(), { icon: I.check, cls: 'pri' }),
       ]
-    } else if (n)
-      kids = [
-        ...(n > 1 ? [h('span', { className: 'count', textContent: `${n}` })] : []),
-        btn('', () => ed.selectAll(), {
-          icon: I.all,
-          cls: 'icon',
-          title: 'Select all items  Ctrl+A',
-        }),
-        sep(),
-        btn('90', () => ed.rotate(-90), { icon: I.rotl, title: 'Rotate −90°  Shift+R' }),
-        btn('15', () => ed.rotate(-15), { icon: I.rotl, title: 'Rotate −15°  Q' }),
-        btn('15', () => ed.rotate(15), { icon: I.rotr, title: 'Rotate +15°  E' }),
-        btn('90', () => ed.rotate(90), { icon: I.rotr, title: 'Rotate +90°  R' }),
-        sep(),
-        btn('', () => ed.dup(), { icon: I.copy, cls: 'icon', title: 'Duplicate  Ctrl+D' }),
-        btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: 'Delete  Del' }),
-      ]
-    else if (o)
+    } else if (o)
       kids = [
         ...(o.kind === 'door'
           ? [
@@ -522,8 +505,7 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
           : []),
         btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: `Delete ${o.kind}` }),
       ]
-    else if (s?.kind === 'wall') {
-      const w = p().plan.walls[s.i]
+    else if (w) {
       const m = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }
       kids = [
         btn('Door', () => ed.addOpening('door', m), { icon: I.door }),
@@ -531,7 +513,23 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         sep(),
         btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: 'Delete wall' }),
       ]
-    }
+    } else if (n)
+      kids = [
+        ...(n > 1 ? [h('span', { className: 'count', textContent: `${n}` })] : []),
+        btn('', () => ed.selectAll(), {
+          icon: I.all,
+          cls: 'icon',
+          title: 'Select everything  Ctrl+A',
+        }),
+        sep(),
+        btn('90', () => ed.rotate(-90), { icon: I.rotl, title: 'Rotate −90°  Shift+R' }),
+        btn('15', () => ed.rotate(-15), { icon: I.rotl, title: 'Rotate −15°  Q' }),
+        btn('15', () => ed.rotate(15), { icon: I.rotr, title: 'Rotate +15°  E' }),
+        btn('90', () => ed.rotate(90), { icon: I.rotr, title: 'Rotate +90°  R' }),
+        sep(),
+        btn('', () => ed.dup(), { icon: I.copy, cls: 'icon', title: 'Duplicate  Ctrl+D' }),
+        btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: 'Delete  Del' }),
+      ]
     actions.replaceChildren(...kids)
     actions.hidden = !kids.length
   }
@@ -815,23 +813,31 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         ),
         btn('Edit item', () => openDlg(a), { icon: I.edit }),
       )
-    } else if (ed.selectedItems().length > 1) {
+    } else if (ed.count() > 1) {
       const its = ed.selectedItems()
+      const sel = /** @type {import('./editor.js').SelSet} */ (ed.sel)
+      /** @type {[number, string, string?][]} */
+      const kinds = [
+        [its.length, 'item'],
+        [sel.walls.length, 'wall'],
+        [sel.opens.length, 'door / window', 'doors / windows'],
+      ]
+      const parts = kinds
+        .filter(([n]) => n)
+        .map(([n, one, many]) => `${n} ${n === 1 ? one : (many ?? `${one}s`)}`)
       const bad = its.filter((i) => ed.collides(i, i.x, i.y, i.rot)).length
       insp.replaceChildren(
         h(
           'div',
           {},
-          h('div', { className: 'title', textContent: `${its.length} items` }),
+          h('div', { className: 'title', textContent: `${ed.count()} selected` }),
           h('div', {
             className: `sub ${bad ? 'warn' : ''}`,
-            textContent: bad
-              ? `${bad} overlap a wall`
-              : 'Move, rotate, duplicate or delete together',
+            textContent: bad ? `${bad} overlap a wall` : parts.join(', '),
           }),
         ),
       )
-    } else if (ed.sel?.kind === 'open') {
+    } else if (ed.selectedOpening()) {
       const o = /** @type {import('./model.js').Opening} */ (ed.selectedOpening())
       const G = ed.geom(o)
       insp.replaceChildren(
@@ -854,8 +860,8 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
           ),
         ),
       )
-    } else if (ed.sel?.kind === 'wall') {
-      const w = p().plan.walls[ed.sel.i]
+    } else if (ed.selectedWall()) {
+      const w = /** @type {import('./model.js').Wall} */ (ed.selectedWall())
       insp.replaceChildren(
         h(
           'div',

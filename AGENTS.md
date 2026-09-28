@@ -1,33 +1,34 @@
 # flatplan
 
 2D furniture arrangement planner. Canvas editor for walls, doors, windows and
-furniture, all lengths in cm. Static site, no runtime deps, state in
-localStorage plus JSON export/import. Org rules: `JakobMelchard/.agents`
-(loaded from the checkout, not vendored).
+furniture, all lengths in cm. Static PWA, vanilla JS + JSDoc, no bundler, no
+runtime deps. State in IndexedDB plus JSON export/import. Primary target is an
+iPad (touch + Apple Pencil) as an installed web app; mouse and keyboard still
+work. Org rules: `JakobMelchard/.agents` (loaded from the checkout, not vendored).
 
 ## Commands
 
 ```sh
 npm ci
-npm run dev        # vite dev server
-npm run build      # tsc --noEmit && vite build -> dist/
-npm run preview    # serve dist/
+npm start          # static dev server, http://127.0.0.1:5173 (BIND=0.0.0.0 for LAN)
+npm run check      # tsc over JSDoc types
+npm run lint
+npm test           # node --test, pure geometry
 ```
 
-There are no tests. `npm run build` is the check; CI runs the same.
+CI runs check, lint and test.
 
 ## Layout
 
 - `index.html` markup and CSS
-- `src/model.ts` types, storage, file helpers
-- `src/editor.ts` canvas view, tools, hit-testing, render
-- `src/ui.ts` sidebar DOM
-- `src/main.ts` wiring
+- `src/model.js` types, project helpers
+- `src/store.js` IndexedDB, export / import, image helpers
+- `src/geom.js` pure geometry (collision, door zones)
+- `src/editor.js` canvas view, pointer input, tools, render
+- `src/ui.js` header, panels, action bar, dialogs
+- `src/main.js` wiring
+- `sw.js`, `manifest.webmanifest`, `icons/` PWA shell; bump `CACHE` in `sw.js`
+  and add new files to `SHELL` when the file list changes
 
-User-facing behaviour and shortcuts are documented in `README.md`.
-
-## Stack exception
-
-TypeScript + Vite by exception to the org toolset (vanilla JS + JSDoc, no
-bundler). Migration to JSDoc is pending an owner decision; do not start it
-unasked.
+User-facing behaviour and shortcuts are documented in `README.md`. Every
+action must be reachable without a keyboard (action bar / inspector).

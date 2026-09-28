@@ -83,8 +83,9 @@ Model already 3D-ready: `Asset.h`, `Item.{x,y,rot}`, walls as segments. Add `src
 
 Served on the tailnet at `https://mimi.mermaid-dory.ts.net:5180` from
 `~/Workspaces/JakobMelchard/flatplan.tree/worktrees/prd`, a detached worktree of the mimi clone.
-`com.lilfeelz.flatplan` (LaunchAgent) runs `node serve.js` there on `127.0.0.1:5180`, behind
-`tailscale serve --https=5180 http://127.0.0.1:5180`.
+`com.lilfeelz.flatplan` (LaunchAgent) runs `node serve.js` there on `127.0.0.1:5180`. The
+tailnet port is declared in `JakobMelchard/monitor` `etc/tailscale/serve.toml`; change exposure
+there and run `make tailscale-apply`.
 
 Deploys come from git hooks in the mimi clone's `.git/hooks` (local, not committed, since only
 that host has the worktree): `pre-push` checks out `main` in the worktree when `main` is pushed,

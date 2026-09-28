@@ -44,6 +44,8 @@ const I = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/>',
   undo: '<path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/>',
   redo: '<path d="M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3"/>',
+  multi:
+    '<rect x="3" y="3" width="11" height="11" rx="1" stroke-dasharray="3 2"/><path d="M13 13l7 3-3 1-1 3z"/>',
   all: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
   left: '<path d="M4 5v14M20 5v14M9 5h6v14H9z"/>',
@@ -344,17 +346,30 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
   const toolBtn = (icon, fn, tip) =>
     h('button', { className: 'tool', type: 'button', title: tip, on: { click: fn } }, svg(icon))
   const undoBtn = toolBtn(I.undo, () => ed.undo(), 'Undo  Ctrl+Z · two-finger tap')
-  const redoBtn = toolBtn(I.redo, () => ed.redo(), 'Redo  Ctrl+Shift+Z · three-finger tap')
+  const redoBtn = toolBtn(I.redo, () => ed.redo(), 'Redo  Shift+Ctrl+Z')
+  const multiBtn = toolBtn(
+    I.multi,
+    () => {
+      if (ed.tool !== 'select') ed.setTool('select')
+      ed.multi = !ed.multi
+      ed.onSelect()
+      ed.hint()
+    },
+    'Multi-select: tap items to add / remove, drag to box-select',
+  )
   undoBtn.setAttribute('data-tip', 'Undo')
   redoBtn.setAttribute('data-tip', 'Redo')
+  multiBtn.setAttribute('data-tip', 'Multi-select')
   const syncTools = () => {
-    toolBtns.forEach((b, i) => b.classList.toggle('on', tools[i][0] === ed.tool))
+    toolBtns.forEach((b, i) => b.classList.toggle('on', tools[i][0] === ed.tool && !ed.multi))
+    multiBtn.classList.toggle('on', ed.multi && ed.tool === 'select')
     undoBtn.disabled = !ed.hist.undos.length
     redoBtn.disabled = !ed.hist.redos.length
   }
   const $ = (/** @type {string} */ s) => /** @type {HTMLElement} */ (main.querySelector(s))
   $('#toolbar').append(
     toolBtns[0],
+    multiBtn,
     h('span', { className: 'sep' }),
     ...toolBtns.slice(1, 4),
     h('span', { className: 'sep' }),
@@ -363,6 +378,21 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
     undoBtn,
     redoBtn,
   )
+
+  // after an undo / redo: say what happened and offer the opposite, so redo is findable
+  const toast = $('#toast')
+  let toastT = 0
+  ed.onHistory = (did) => {
+    toast.replaceChildren(
+      h('span', { textContent: did === 'undo' ? 'Undone' : 'Redone' }),
+      did === 'undo'
+        ? btn('Redo', () => ed.redo(), { icon: I.redo, cls: 'ghost' })
+        : btn('Undo', () => ed.undo(), { icon: I.undo, cls: 'ghost' }),
+    )
+    toast.hidden = false
+    clearTimeout(toastT)
+    toastT = window.setTimeout(() => (toast.hidden = true), 4000)
+  }
 
   const pct = h('span', { className: 'pct' })
   ed.onView = () => (pct.textContent = `${Math.round(ed.k * 100)} %`)
@@ -911,8 +941,12 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         row('pinch', 'Zoom and pan with two fingers'),
         row('Pencil', 'Once used, only the Pencil places points; fingers pan and zoom'),
         row('handle', 'Drag the dot above an item to rotate (15° steps)'),
-        row('two / three-finger tap', 'Undo / redo'),
-        row('long-press', 'On an item: add to / remove from selection. On empty space: drag a box'),
+        row('two-finger tap', 'Undo; the pill that appears offers Redo (also the toolbar arrows)'),
+        row('multi-select button', 'Next to Select: taps add / remove items, drag draws a box'),
+        row(
+          'long-press',
+          'Same without the button: on an item toggles it, on empty space starts a box',
+        ),
       ),
       col(
         'Walls',

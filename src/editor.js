@@ -91,9 +91,15 @@ export class Editor {
   sel = null
   /** Set once an Apple Pencil (or any pen) is used: from then on only the pen places points. */
   penSeen = false
+  /** Multi-select mode (toolbar toggle): taps add / remove items, drag on empty space boxes. */
+  multi = false
+  /** @type {{ at: Pt, t: number } | null} ring shown where a long-press registered */
+  pulse = null
   onChange = () => {}
   onSelect = () => {}
   onView = () => {}
+  /** @type {(did: 'undo' | 'redo') => void} */
+  onHistory = () => {}
   /** @type {(hint: string, coords: string) => void} */
   status = () => {}
   /** @type {(measured: number) => Promise<number | null>} asks the real length (cm) of a marked segment */
@@ -111,7 +117,10 @@ export class Editor {
   mods = { shift: false, ctrl: false }
   /** @type {Map<number, { x: number, y: number, sx: number, sy: number, type: string }>} */
   ptrs = new Map()
-  /** @type {{ x: number, y: number, type: string, moved: boolean, multi: boolean } | null} */
+  /**
+   * untoggle: in multi mode a tap (no drag) on an already selected item deselects it on release
+   * @type {{ x: number, y: number, type: string, moved: boolean, multi: boolean, untoggle?: string } | null}
+   */
   press = null
   /** multi-finger gesture: start time, most fingers down, whether any finger travelled */
   gest = { t0: 0, max: 0, moved: false }
@@ -137,6 +146,11 @@ export class Editor {
     cv.addEventListener('pointerleave', (e) => {
       if (e.pointerType !== 'touch' && !this.ptrs.size) ((this.cur = null), this.render())
     })
+    // iPad Safari's own long-press / double-tap handling can cancel pointers mid-gesture;
+    // pointer events keep arriving when the touch events are default-prevented
+    for (const t of ['touchstart', 'touchmove', 'touchend'])
+      cv.addEventListener(t, (e) => e.preventDefault(), { passive: false })
+    cv.addEventListener('contextmenu', (e) => e.preventDefault())
     cv.addEventListener('dblclick', () => this.endWall())
     cv.addEventListener('wheel', (e) => this.wheel(e), { passive: false })
     window.addEventListener('keydown', (e) => this.key(e))
@@ -434,10 +448,14 @@ export class Editor {
     this.restoring = false
   }
   undo() {
-    this.restore(this.hist.undo())
+    const p = this.hist.undo()
+    this.restore(p)
+    if (p) this.onHistory('undo')
   }
   redo() {
-    this.restore(this.hist.redo())
+    const p = this.hist.redo()
+    this.restore(p)
+    if (p) this.onHistory('redo')
   }
 
   // ---- pointer events: mouse, touch (pinch/pan with two fingers) and pen share one path.
@@ -478,6 +496,7 @@ export class Editor {
   pick(p, e) {
     const slop = this.slop(e.pointerType)
     const toggle = e.shiftKey || e.metaKey || e.ctrlKey
+    const multi = toggle || this.multi
     const cur = this.selected()
     const ca = cur && asset(this.p, cur.asset)
     if (cur && ca && !toggle) {
@@ -500,8 +519,11 @@ export class Editor {
         this.selectItems(ids.includes(hit.id) ? ids.filter((i) => i !== hit.id) : [...ids, hit.id])
         return
       }
-      // grabbing part of a multi-selection moves all of it
-      if (!ids.includes(hit.id)) this.sel = { kind: 'items', ids: [hit.id] }
+      // grabbing part of a multi-selection moves all of it; in multi mode a new item joins,
+      // and releasing an already selected one without dragging drops it
+      if (this.multi && ids.includes(hit.id) && this.press) this.press.untoggle = hit.id
+      else if (this.multi) this.sel = { kind: 'items', ids: [...ids, hit.id] }
+      else if (!ids.includes(hit.id)) this.sel = { kind: 'items', ids: [hit.id] }
       items.push(...items.splice(items.indexOf(hit), 1)) // raise to top
       const its = this.selectedItems()
       this.drag = {
@@ -513,9 +535,10 @@ export class Editor {
         dy: hit.y - p.y,
       }
       // touch long-press without moving: add to / remove from the selection instead
-      if (e.pointerType === 'touch')
+      if (e.pointerType === 'touch' && !this.multi)
         this.holdFor(() => {
           this.drag = null
+          this.flash(p)
           this.selectItems(
             ids.includes(hit.id) ? ids.filter((i) => i !== hit.id) : [...ids, hit.id],
           )
@@ -536,23 +559,36 @@ export class Editor {
       }
     }
     const wi = this.p.plan.walls.findIndex((w) => segDist(p, w.a, w.b) < near)
-    if (wi < 0 && (e.pointerType === 'pen' || toggle)) return this.marquee(p, toggle)
-    if (!toggle) this.sel = wi >= 0 ? { kind: 'wall', i: wi } : null
+    // multi mode / modifier: box select (walls are not part of a multi-selection)
+    if (multi) return this.marquee(p, true)
+    if (wi < 0 && e.pointerType === 'pen') return this.marquee(p, false)
+    this.sel = wi >= 0 ? { kind: 'wall', i: wi } : null
     this.onSelect()
     if (wi < 0) {
       this.pan(e)
-      if (e.pointerType === 'touch') this.holdFor(() => this.marquee(p, true))
+      if (e.pointerType === 'touch') this.holdFor(() => this.marquee(p, true), p)
     }
     this.render()
   }
   /**
+   * Brief ring at p: feedback that a long-press registered.
+   * @param {Pt} p
+   */
+  flash(p) {
+    this.pulse = { at: p, t: performance.now() }
+    this.render()
+    setTimeout(() => ((this.pulse = null), this.render()), 350)
+  }
+  /**
    * Run fn if the single pointer stays put for HOLD_MS.
    * @param {() => void} fn
+   * @param {Pt} [at] where to show the long-press ring
    */
-  holdFor(fn) {
+  holdFor(fn, at) {
     this.hold = window.setTimeout(() => {
       if (this.ptrs.size === 1 && this.press && !this.press.moved) {
         this.press.moved = true // the eventual pointer up is not a tap
+        if (at) this.flash(at)
         fn()
       }
     }, HOLD_MS)
@@ -738,6 +774,14 @@ export class Editor {
     this.drag = null
     if (d?.kind === 'marquee') return this.render()
     if ((d?.kind === 'items' || d?.kind === 'open') && pr?.moved) this.commit()
+    if (d?.kind === 'items' && pr?.untoggle && !pr.moved && !cancel) {
+      const drop = pr.untoggle
+      return this.selectItems(
+        this.selectedItems()
+          .filter((i) => i.id !== drop)
+          .map((i) => i.id),
+      )
+    }
     if (d?.kind === 'turn') {
       this.unstick(d.it)
       this.changed()
@@ -816,6 +860,7 @@ export class Editor {
     if (cmd && k === 'a' && this.tool === 'select') return (e.preventDefault(), this.selectAll())
     switch (e.key) {
       case 'Escape':
+        this.multi = false
         this.endWall()
         this.scalePts = []
         this.sel = null
@@ -953,13 +998,15 @@ export class Editor {
           ? `tap two points with a known distance (${this.scalePts.length}/2)`
           : this.tool === 'door' || this.tool === 'window'
             ? `tap a wall to place a ${this.tool}`
-            : this.selectedItems().length > 1
-              ? `${this.selectedItems().length} items · drag to move together`
-              : this.selected()
-                ? 'drag to move · handle rotates · long-press adds more'
-                : this.selectedOpening()
-                  ? 'drag along the wall'
-                  : 'tap to select · long-press + drag to select many · pinch to zoom'
+            : this.multi
+              ? `multi-select (${this.selectedItems().length}) · tap items to add / remove · drag to box`
+              : this.selectedItems().length > 1
+                ? `${this.selectedItems().length} items · drag to move together`
+                : this.selected()
+                  ? 'drag to move · handle rotates · long-press adds more'
+                  : this.selectedOpening()
+                    ? 'drag along the wall'
+                    : 'tap to select · long-press + drag to select many · pinch to zoom'
     this.status(t, c)
   }
 
@@ -1265,6 +1312,13 @@ export class Editor {
       g.lineWidth = 1.5 / k
       g.beginPath()
       g.arc(q.x, q.y, 5 / k, 0, 7)
+      g.stroke()
+    }
+    if (this.pulse) {
+      g.strokeStyle = C.acc
+      g.lineWidth = 3 / k
+      g.beginPath()
+      g.arc(this.pulse.at.x, this.pulse.at.y, 22 / k, 0, 7)
       g.stroke()
     }
     const mq = this.drag

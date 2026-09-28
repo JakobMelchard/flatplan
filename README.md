@@ -78,3 +78,17 @@ Top bar: tools · layout switcher · zoom/fit · export/import. Left: catalog (f
 ## 3D extension (planned)
 
 Model already 3D-ready: `Asset.h`, `Item.{x,y,rot}`, walls as segments. Add `src/view3d.js`: three.js scene, walls → `ExtrudeGeometry` (height 250, thickness 10), items → `BoxGeometry(w,h,d)` at `(x, h/2, y)` rotated `-rot`, or `GLTFLoader` when `Asset.model` (glb data URL) present. Toggle button in `#tools`; re-sync on `Editor.onChange`.
+
+## Hosting (mimi)
+
+Served on the tailnet at `https://mimi.mermaid-dory.ts.net:5180`. Deploys are pull-based: push or
+merge, and within a minute the site runs the new commit (the service worker is network-first, so a
+reload shows it).
+
+- `~/Workspaces/JakobMelchard/flatplan.tree/worktrees/prd`: detached worktree that is served.
+- `com.lilfeelz.flatplan` (LaunchAgent): `node serve.js` from that worktree on `127.0.0.1:5180`,
+  behind `tailscale serve --https=5180 http://127.0.0.1:5180`.
+- `com.lilfeelz.flatplan.pull` (LaunchAgent, every 60 s): `scripts/pull.sh <prd> <branch>` fetches
+  and checks out the branch tip. Log: `~/Data/flatplan/logs/pull.log`.
+
+To deploy a different branch, change the branch argument in the `.pull` plist and reload it.

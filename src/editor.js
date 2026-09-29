@@ -26,18 +26,59 @@ const TAP_PX = 8 // pointer travel below this is a tap, above it a drag
 const TURN_PX = 28 // rotation handle distance beyond the item edge
 const HOLD_MS = 450 // touch long-press: multi-select
 const GESTURE_TAP_MS = 300 // two-finger tap = undo, three-finger tap = redo
-const C = {
-  swing: '#6272a4',
-  bg: '#21222c',
-  grid: '#2b2d3a',
-  grid2: '#383a4a',
-  wall: '#f8f8f2',
-  acc: '#bd93f9',
-  bad: '#ff5555',
-  pill: '#282a36',
-  pillLine: '#44475a',
-  pillText: '#8be9fd',
-  handle: '#282a36',
+/** Canvas colours: org token (tokens.css custom property) and the fallback used before it loads. */
+const TOKENS = {
+  swing: ['--muted', '#6272a4'],
+  bg: ['--bg', '#0b0d10'],
+  grid: ['--grid', 'rgba(238, 244, 255, 0.035)'],
+  grid2: ['--line', 'rgba(98, 114, 164, 0.25)'],
+  wall: ['--fg', '#f8f8f2'],
+  acc: ['--accent', '#8be9fd'],
+  bad: ['--danger', '#ff5555'],
+  pill: ['--card', '#15171f'],
+  pillLine: ['--line', 'rgba(98, 114, 164, 0.25)'],
+  pillText: ['--fg', '#f8f8f2'],
+  handle: ['--card', '#15171f'],
+  outline: ['--ghost', 'rgba(255, 255, 255, 0.18)'],
+  font: ['--font', 'ui-monospace, Menlo, monospace'],
+}
+const C = /** @type {Record<keyof typeof TOKENS, string>} */ (
+  Object.fromEntries(Object.entries(TOKENS).map(([k, [, v]]) => [k, v]))
+)
+/** Re-read the canvas colours from the document's custom properties. */
+const readTokens = () => {
+  const cs = getComputedStyle(document.documentElement)
+  for (const [k, [name, fallback]] of Object.entries(TOKENS))
+    C[/** @type {keyof typeof TOKENS} */ (k)] = cs.getPropertyValue(name).trim() || fallback
+}
+/**
+ * `col` (a hex or rgb() token) at alpha `a` (0..1), multiplied into any alpha it already has.
+ * @param {string} col colour token value
+ * @param {number} a alpha, 0..1
+ * @returns {string} rgba() colour, or `col` unchanged when it is neither hex nor rgb()
+ */
+const alpha = (col, a) => {
+  const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(col)
+  const rgb = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:[\s,/]+([\d.]+))?\s*\)$/i.exec(col)
+  if (hex) return `rgba(${hex.slice(1).map((h) => parseInt(h, 16))}, ${a})`
+  if (rgb) return `rgba(${rgb.slice(1, 4)}, ${a * +(rgb[4] ?? 1)})`
+  return col
+}
+
+/**
+ * Shorten `s` with an ellipsis until it fits `max` in the context's current font.
+ * @param {CanvasRenderingContext2D} g context with the font set
+ * @param {string} s text
+ * @param {number} max width in the context's units
+ * @returns {string} `s`, shortened, or '' when not even one character fits
+ */
+const fitText = (g, s, max) => {
+  if (g.measureText(s).width <= max) return s
+  for (let n = s.length - 1; n > 0; n--) {
+    const t = `${s.slice(0, n).trimEnd()}…`
+    if (g.measureText(t).width <= max) return t
+  }
+  return ''
 }
 
 export class Editor {
@@ -103,6 +144,14 @@ export class Editor {
       'keyup',
       (e) => (this.mods = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey }),
     )
+    // canvas colours come from tokens.css: read now, again once it (re)loads or the theme flips
+    const theme = () => (readTokens(), this.render())
+    readTokens()
+    document.querySelector('link[href="tokens.css"]')?.addEventListener('load', theme)
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme)
+    new MutationObserver(theme).observe(document.documentElement, {
+      attributeFilter: ['data-theme'],
+    })
     this.resize()
   }
 
@@ -1044,7 +1093,7 @@ export class Editor {
       g.translate(m.x, m.y)
       g.rotate(ang)
       const txt = `${dist(a, b).toFixed(0)} cm`
-      g.font = `500 ${11 / k}px Inter, system-ui`
+      g.font = `500 ${11 / k}px ${C.font}`
       const tw = g.measureText(txt).width
       g.fillStyle = C.pill
       g.strokeStyle = C.pillLine
@@ -1146,7 +1195,7 @@ export class Editor {
       }
       g.shadowColor = 'transparent'
       g.lineWidth = (on ? 2 : 1) / k
-      g.strokeStyle = bad ? C.bad : on ? C.acc : 'rgba(255,255,255,.22)'
+      g.strokeStyle = bad ? C.bad : on ? C.acc : C.outline
       g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d)
       if (on) {
         const hs = 7 / k
@@ -1179,14 +1228,15 @@ export class Editor {
       if (a.w * k > 44 && a.d * k > 18) {
         const dark = a.img || lum(a.color) > 0.55
         g.fillStyle = dark ? 'rgba(0,0,0,.75)' : 'rgba(255,255,255,.9)'
-        g.font = `500 ${12 / k}px Inter, system-ui`
+        g.font = `500 ${12 / k}px ${C.font}`
         g.textAlign = 'center'
         g.textBaseline = 'middle'
-        g.fillText(a.name, 0, a.d * k > 40 ? -7 / k : 0)
+        const room = a.w - 8 / k
+        g.fillText(fitText(g, a.name, room), 0, a.d * k > 40 ? -7 / k : 0)
         if (a.d * k > 40) {
-          g.font = `${10.5 / k}px Inter, system-ui`
+          g.font = `${10.5 / k}px ${C.font}`
           g.fillStyle = dark ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.6)'
-          g.fillText(`${a.w} × ${a.d}`, 0, 8 / k)
+          g.fillText(fitText(g, `${a.w} × ${a.d}`, room), 0, 8 / k)
         }
       }
       g.restore()
@@ -1198,7 +1248,7 @@ export class Editor {
       const s = last && this.lenBuf ? this.byLength(+this.lenBuf || 0) : this.snapWall(this.cur)
       if (last) {
         g.lineWidth = this.wallT()
-        g.strokeStyle = C.acc + '88'
+        g.strokeStyle = alpha(C.acc, 0.53)
         g.beginPath()
         g.moveTo(last.x, last.y)
         g.lineTo(s.x, s.y)
@@ -1219,7 +1269,7 @@ export class Editor {
     }
     const mq = this.drag
     if (mq?.kind === 'marquee') {
-      g.fillStyle = C.acc + '1f'
+      g.fillStyle = alpha(C.acc, 0.12)
       g.strokeStyle = C.acc
       g.lineWidth = 1 / k
       g.setLineDash([5 / k, 4 / k])

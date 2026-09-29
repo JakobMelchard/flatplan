@@ -21,6 +21,9 @@ CI runs check, lint and test.
 ## Layout
 
 - `index.html` markup and CSS
+- `tokens.css` org design tokens (custom properties), vendored from
+  `JakobMelchard/.config` by `config-sync tokens` (destination in
+  `.config/tokens.path`); never edit, the app CSS and canvas read its variables
 - `src/model.js` types, project helpers
 - `src/store.js` IndexedDB, export / import, image helpers
 - `src/geom.js` pure geometry (collision, door zones)

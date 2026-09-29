@@ -130,7 +130,24 @@ const thumb = (a) => {
   })
   return h('div', { className: 'th' }, i)
 }
-const PALETTE = ['#50fa7b', '#8be9fd', '#ffb86c', '#ff79c6', '#f1fa8c', '#bd93f9', '#ff5555']
+/** Default colours for new furniture: org palette tokens, with fallbacks (a colour input needs hex). */
+const PALETTE = /** @type {const} */ ([
+  ['--green', '#50fa7b'],
+  ['--accent', '#8be9fd'],
+  ['--orange', '#ffb86c'],
+  ['--pink', '#ff79c6'],
+  ['--purple', '#bd93f9'],
+  ['--red', '#ff5555'],
+])
+/**
+ * @param {number} i index, wraps around
+ * @returns {string} #rrggbb
+ */
+const paletteColor = (i) => {
+  const [name, fallback] = PALETTE[i % PALETTE.length]
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return /^#[0-9a-f]{6}$/i.test(v) ? v : fallback
+}
 /** @param {string} s */
 const kbd = (s) => s.replace(/\[(.+?)\]/g, '<kbd>$1</kbd>')
 const narrow = matchMedia('(max-width: 1200px)')
@@ -565,7 +582,7 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
     f.w.value = String(a?.w ?? 100)
     f.d.value = String(a?.d ?? 50)
     f.h.value = String(a?.h ?? 75)
-    f.color.value = a?.color ?? PALETTE[p().assets.length % PALETTE.length]
+    f.color.value = a?.color ?? paletteColor(p().assets.length)
     f.img = a?.img ?? ''
     syncImg()
     dlg.showModal()

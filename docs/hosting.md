@@ -11,7 +11,7 @@ Every push to `main` runs `.github/workflows/pages.yml`:
 1. Stage the app shell: `index.html`, `tokens.css`, `sw.js`, the manifest, `icons/` and `src/`.
    Nothing from `node_modules`, `test/` or `serve.js` is published.
 2. Write a `version` file with the deployed commit, which the app polls to offer a reload.
-3. Build `docs/` with HonKit into `docs/` of the site.
+3. Render `docs/` with the org docs action into `docs/` of the site.
 4. Upload and deploy through `actions/deploy-pages`.
 
 The Environments page of the repo shows what is live and since when.

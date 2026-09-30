@@ -955,7 +955,12 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         row('Export / Import', 'Whole project as JSON incl. images'),
       ),
     ),
-    h('div', { className: 'hint foot', innerHTML: kbd('Press [?] anytime to open this.') }),
+    h(
+      'div',
+      { className: 'hint foot' },
+      h('span', { innerHTML: kbd('Press [?] anytime to open this. ') }),
+      h('a', { href: 'docs/', target: '_blank', textContent: 'Full documentation' }),
+    ),
   )
   body.append(help)
   window.addEventListener('keydown', (e) => {

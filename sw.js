@@ -1,7 +1,7 @@
 // Offline support: network first so a deploy shows up on the next load, cache as fallback.
 /** @type {any} ServiceWorkerGlobalScope; the webworker lib clashes with dom in one tsconfig */
 const sw = self
-const CACHE = 'flatplan-v6'
+const CACHE = 'flatplan-v7'
 const SHELL = [
   './',
   'index.html',
@@ -20,7 +20,6 @@ const SHELL = [
   'src/editor.js',
   'src/ui.js',
   'src/feedback.js',
-  'observe.js',
 ]
 
 self.addEventListener('install', (/** @type {any} */ e) => {

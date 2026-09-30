@@ -1,0 +1,27 @@
+name: Feedback
+description: Something in the app is wrong, annoying or missing.
+labels: [feedback]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is it
+      options:
+        - bug
+        - idea
+        - question
+    validations:
+      required: true
+  - type: textarea
+    id: message
+    attributes:
+      label: What happened
+      description: What you did, what you saw, what you expected. Right after it happened is best.
+      placeholder: I rotated the sofa with the little dot and it jumped to the other wall.
+    validations:
+      required: true
+  - type: input
+    id: context
+    attributes:
+      label: Context
+      description: Filled in by the app when you come from its Feedback button; otherwise device and version.

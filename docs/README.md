@@ -18,6 +18,6 @@ your device unless you export it.
 - [Furniture](furniture.md): the catalog, placing and moving items, snapping.
 - [Layouts & data](layouts.md): several arrangements per plan, persistence, export and import.
 - [Shortcuts](shortcuts.md): every keyboard shortcut; `?` opens the same list in the app.
-- [Feedback](feedback.md): the Feedback button people with a link get, and where it goes.
+- [Feedback](feedback.md): the Feedback button, and where it goes.
 
 Development and hosting are under Project.

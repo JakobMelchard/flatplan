@@ -55,9 +55,6 @@ with three.js would extrude walls (height 250, thickness 10) and place items as 
 
 ## Docs
 
-This site is built with [HonKit](https://github.com/honkit/honkit) from `docs/` by the Pages
-workflow and published under `/docs/` next to the app. To preview locally:
-
-```sh
-npx --yes honkit serve docs
-```
+This site is `docs/*.md` rendered by the org's `actions/docs` (JakobMelchard/.github) into the
+docs.melchard.org shell, nav from `docs/SUMMARY.md`, published under `/docs/` next to the app by
+the Pages workflow. To preview locally, run that action's `build.mjs` against `docs/`.

@@ -29,7 +29,7 @@ The service worker (offline use, install) only registers on HTTPS or localhost.
 - `src/` model, store (IndexedDB, export / import), geometry, history, editor (canvas + input), ui,
   main
 - `sw.js`, `manifest.webmanifest`, `icons/` PWA shell; `observe.js` vendored feedback shim (see docs/feedback.md)
-- `serve.js` dev server, `test/` geometry tests, `docs/` HonKit source of the docs site
+- `serve.js` dev server, `test/` geometry tests, `docs/` source of the docs site
 
 ## Hosting
 

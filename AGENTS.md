@@ -33,5 +33,6 @@ CI runs check, lint and test.
 - `sw.js`, `manifest.webmanifest`, `icons/` PWA shell; bump `CACHE` in `sw.js`
   and add new files to `SHELL` when the file list changes
 
-User-facing behaviour and shortcuts are documented in `README.md`. Every
+User-facing behaviour and shortcuts are documented in `docs/` (HonKit, published under
+`/docs/` next to the app) and in the in-app `?` dialog; keep both in step. Every
 action must be reachable without a keyboard (action bar / inspector).

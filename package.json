@@ -19,7 +19,7 @@
     "eslint-plugin-jsdoc": "64.5.4",
     "globals": "17.12.0",
     "prettier": "3.9.9",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   },
   "prettier": "@jakobmelchard/config/prettier"
 }

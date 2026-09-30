@@ -1,4 +1,4 @@
-/* VENDORED from JakobMelchard/observe src/observe/shim/observe.js @a63b3d3 (PR #12). Do not edit; copy a newer version and update this line. */
+/* VENDORED from JakobMelchard/observe src/observe/shim/observe.js @2975d9a. Do not edit; copy a newer version and update this line. */
 (function (cfg) {
   cfg = cfg || {};
   var endpoint = cfg.endpoint || "/__observe__/otlp";
@@ -20,7 +20,8 @@
   var _fetch = window.fetch;
   window.fetch = function () {
     var args = arguments;
-    var url = typeof args[0] === "string" ? args[0] : args[0] && args[0].url;
+    // string, Request (.url) or URL (String() is its href)
+    var url = args[0] && args[0].url ? args[0].url : String(args[0] || "");
     if (!url || url.indexOf("/__observe__/") === 0 || url === feedbackEndpoint) {
       return _fetch.apply(this, args);
     }
@@ -28,7 +29,7 @@
     return _fetch.apply(this, args).then(function (resp) {
       if (!resp.ok) {
         tryToSendSpan("fetch error", "warning", {
-          url: typeof args[0] === "string" ? args[0] : args[0].url,
+          url: url,
           status: resp.status,
           duration: Date.now() - start,
         });
@@ -36,7 +37,7 @@
       return resp;
     }).catch(function (err) {
       tryToSendSpan("fetch failed", "error", {
-        url: typeof args[0] === "string" ? args[0] : args[0].url,
+        url: url,
         error: err.message,
         duration: Date.now() - start,
       });

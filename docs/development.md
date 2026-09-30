@@ -31,7 +31,7 @@ localhost, so test install and offline behaviour against the deployed site or a 
 | `src/main.js`                             | Wiring, service worker registration                                  |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA shell                                                            |
 | `serve.js`                                | Dev server; also `/version` and the `/log` sink                      |
-| `docs/`                                   | This site (markdown, org docs action)                                |
+| `docs/`                                   | This site (HonKit)                                                   |
 
 When the file list changes, bump `CACHE` in `sw.js` and add new files to `SHELL`.
 
@@ -55,6 +55,10 @@ with three.js would extrude walls (height 250, thickness 10) and place items as 
 
 ## Docs
 
-This site is `docs/*.md` rendered by the org's `actions/docs` (JakobMelchard/.github) into the
-docs.melchard.org shell, nav from `docs/SUMMARY.md`, published at `/flatplan/` with the app under
-`app/` by the Pages workflow. To preview locally, run that action's `build.mjs` against `docs/`.
+This site is built with [HonKit](https://github.com/honkit/honkit) from `docs/` (theme: two imports in
+`docs/dark.css`, tokens and `honkit.css` from the docs root), published at `/flatplan/` with the app
+under `app/` by the Pages workflow. To preview locally:
+
+```sh
+npx --yes honkit serve docs
+```

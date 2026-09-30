@@ -1,6 +1,6 @@
 [![CI](https://github.com/JakobMelchard/flatplan/actions/workflows/ci.yml/badge.svg)](https://github.com/JakobMelchard/flatplan/actions/workflows/ci.yml)
 [![Pages](https://github.com/JakobMelchard/flatplan/actions/workflows/pages.yml/badge.svg)](https://docs.melchard.org/flatplan/)
-[![Docs](https://img.shields.io/badge/docs-docs.melchard.org/flatplan-8be9fd?labelColor=0b0d10)](https://docs.melchard.org/flatplan/docs/)
+[![Docs](https://img.shields.io/badge/docs-docs.melchard.org/flatplan-8be9fd?logo=github&labelColor=0b0d10)](https://docs.melchard.org/flatplan/docs/)
 
 # flatplan
 

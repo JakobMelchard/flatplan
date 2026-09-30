@@ -15,9 +15,8 @@ jobs:
     environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Render the docs at the site root
-        uses: JakobMelchard/.github/actions/docs@main
-        with: { title: flatplan, src: docs, out: site }
+      - name: Build the docs at the site root # HonKit resolves a relative output path against the book root
+        run: npx --yes honkit build docs "$PWD/site"
       - name: Stage the app under /app with a version stamp for the in-app update check
         run: |
           mkdir site/app

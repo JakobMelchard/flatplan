@@ -1,0 +1,6 @@
+{
+  "title": "flatplan",
+  "plugins": ["-fontsettings", "-sharing"],
+  "styles": { "website": "dark.css" },
+  "links": { "sidebar": { "GitHub": "https://github.com/JakobMelchard/flatplan" } }
+}

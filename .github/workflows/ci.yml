@@ -11,3 +11,9 @@ jobs:
     with:
       check-cmd: npm run check && npm run format:check
       test-cmd: npm test
+
+  hooks:
+    uses: JakobMelchard/.github/.github/workflows/hooks.yml@main
+    with:
+      # need node_modules; the node job runs eslint and prettier --check
+      skip: eslint,prettier

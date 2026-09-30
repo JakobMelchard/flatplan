@@ -1,0 +1,27 @@
+name: feedback
+
+# Triage issues labeled `feedback` (observe → switchboard) with opencode.
+# Needs the repo secret OPENCODE_API_KEY_GHA (OpenCode key for Actions, from Infisical).
+
+permissions:
+  contents: read
+  issues: write
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue number to triage again.
+        type: number
+        required: true
+
+jobs:
+  triage:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'feedback'
+    uses: JakobMelchard/.github/.github/workflows/feedback.yml@main
+    with:
+      issue: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.issue) || github.event.issue.number }}
+    secrets:
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY_GHA }}

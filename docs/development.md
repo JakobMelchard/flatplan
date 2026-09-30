@@ -31,7 +31,7 @@ localhost, so test install and offline behaviour against the deployed site or a 
 | `src/main.js`                             | Wiring, service worker registration                                  |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA shell                                                            |
 | `serve.js`                                | Dev server; also `/version` and the `/log` sink                      |
-| `docs/`                                   | This site (HonKit)                                                   |
+| `docs/`                                   | This site (markdown, org docs action)                                |
 
 When the file list changes, bump `CACHE` in `sw.js` and add new files to `SHELL`.
 

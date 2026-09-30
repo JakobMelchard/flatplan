@@ -34,5 +34,5 @@ The service worker (offline use, install) only registers on HTTPS or localhost.
 ## Hosting
 
 GitHub Pages. Push to `main` → `.github/workflows/pages.yml` stages the app shell, writes a
-`version` file for the in-app update check, builds `docs/` with HonKit into `/docs/` and deploys.
+`version` file for the in-app update check, renders `docs/` with the org docs action into `/docs/` and deploys.
 Details in [docs/hosting.md](docs/hosting.md).

@@ -1,13 +1,18 @@
-// Feedback for people who got a link with a token (#fb=…): observe's shim, pointed at switchboard,
-// which files the issue. Without a token nothing loads, nothing is sent and no button shows.
+// Feedback button: observe's shim, pointed at a receiver that files the GitHub issue.
+// Two ways in. On the tailnet the relay on mimi answers a ping, and that is enough: the
+// button appears, the relay knows who you are from Tailscale. Elsewhere a link token
+// (#fb=…) unlocks it and posts straight to switchboard. Without either, nothing loads,
+// nothing is sent and no button shows.
 
 /** @typedef {import('./editor.js').Editor} Editor */
 /** @typedef {{ t: number, app: string, action: string, detail?: string }} LogEntry */
 
 const KEY = 'flatplan.feedback'
+const RELAY = 'https://mimi.mermaid-dory.ts.net:9324'
 const RECEIVER = 'https://switchboard.feelz.workers.dev/in/feedback'
 const REPO = 'JakobMelchard/flatplan'
 const RING = 50
+const PING_MS = 1500
 
 /**
  * @param {Editor} ed
@@ -25,8 +30,18 @@ export function setupFeedback(ed, group) {
   try {
     token = localStorage.getItem(KEY) ?? token
   } catch {}
-  if (!token) return tokenField()
+  if (token) return enable(ed, group, RECEIVER, token)
+  // a DNS name only tailnet devices resolve, and a certificate they trust: reachable means on the tailnet
+  fetch(`${RELAY}/ping`, { signal: AbortSignal.timeout(PING_MS), cache: 'no-store' })
+    .then((r) => (r.ok ? enable(ed, group, `${RELAY}/feedback`, '') : tokenField()))
+    .catch(tokenField)
+}
 
+/**
+ * Load the shim against `endpoint` and put the button in the header.
+ * @param {Editor} ed @param {HTMLElement} group @param {string} endpoint @param {string} token
+ */
+function enable(ed, group, endpoint, token) {
   // the last pointer events with the tool and drag state, so a report says what was happening
   /** @type {LogEntry[]} */
   const logs = []
@@ -53,7 +68,7 @@ export function setupFeedback(ed, group) {
 
   Object.assign(window, {
     __OBSERVE_CONFIG__: {
-      feedbackEndpoint: RECEIVER,
+      feedbackEndpoint: endpoint,
       token,
       repo: REPO,
       traces: false,
@@ -89,8 +104,9 @@ export function setupFeedback(ed, group) {
 }
 
 /**
- * No token yet: a field in the help dialog. An installed home-screen app cannot receive the
- * link's fragment (its storage is separate from Safari's), so the token is pasted there once.
+ * Not on the tailnet and no token yet: a field in the help dialog. An installed home-screen app
+ * cannot receive the link's fragment (its storage is separate from Safari's), so the token is
+ * pasted there once.
  */
 function tokenField() {
   const foot = document.querySelector('dialog.help .hint.foot')

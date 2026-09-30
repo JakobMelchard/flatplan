@@ -56,5 +56,5 @@ with three.js would extrude walls (height 250, thickness 10) and place items as 
 ## Docs
 
 This site is `docs/*.md` rendered by the org's `actions/docs` (JakobMelchard/.github) into the
-docs.melchard.org shell, nav from `docs/SUMMARY.md`, published under `/docs/` next to the app by
-the Pages workflow. To preview locally, run that action's `build.mjs` against `docs/`.
+docs.melchard.org shell, nav from `docs/SUMMARY.md`, published at `/flatplan/` with the app under
+`app/` by the Pages workflow. To preview locally, run that action's `build.mjs` against `docs/`.

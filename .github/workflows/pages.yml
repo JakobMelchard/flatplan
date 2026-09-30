@@ -15,14 +15,14 @@ jobs:
     environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Stage the static app and a version stamp for the in-app update check
-        run: |
-          mkdir site
-          cp -r index.html tokens.css observe.js sw.js manifest.webmanifest icons src site
-          printf '{"version":"%s","debug":false}\n' "$(git log -1 --format='%h %s')" > site/version
-      - name: Build the docs site
+      - name: Render the docs at the site root
         uses: JakobMelchard/.github/actions/docs@main
-        with: { title: flatplan, src: docs, out: site/docs }
+        with: { title: flatplan, src: docs, out: site }
+      - name: Stage the app under /app with a version stamp for the in-app update check
+        run: |
+          mkdir site/app
+          cp -r index.html tokens.css observe.js sw.js manifest.webmanifest icons src site/app
+          printf '{"version":"%s","debug":false}\n' "$(git log -1 --format='%h %s')" > site/app/version
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with: { path: site }
       - id: deploy

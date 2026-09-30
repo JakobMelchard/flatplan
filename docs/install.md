@@ -1,6 +1,6 @@
 # Install & use
 
-flatplan runs at [docs.melchard.org/flatplan](https://docs.melchard.org/flatplan/). Nothing to
+flatplan runs at [docs.melchard.org/flatplan/app](https://docs.melchard.org/flatplan/app/). Nothing to
 sign up for; the browser is the app.
 
 ## Add to the home screen

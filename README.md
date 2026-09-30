@@ -1,6 +1,6 @@
 [![CI](https://github.com/JakobMelchard/flatplan/actions/workflows/ci.yml/badge.svg)](https://github.com/JakobMelchard/flatplan/actions/workflows/ci.yml)
-[![Pages](https://github.com/JakobMelchard/flatplan/actions/workflows/pages.yml/badge.svg)](https://docs.melchard.org/flatplan/)
-[![Docs](https://img.shields.io/badge/docs-docs.melchard.org/flatplan-8be9fd?logo=github&labelColor=0b0d10)](https://docs.melchard.org/flatplan/docs/)
+[![Pages](https://github.com/JakobMelchard/flatplan/actions/workflows/pages.yml/badge.svg)](https://docs.melchard.org/flatplan/app/)
+[![Docs](https://img.shields.io/badge/docs-docs.melchard.org/flatplan-8be9fd?logo=github&labelColor=0b0d10)](https://docs.melchard.org/flatplan/)
 
 # flatplan
 
@@ -8,8 +8,8 @@
 step. All lengths cm. Installable as a PWA (iPad: Share → Add to Home Screen) and usable with
 touch, Apple Pencil, mouse or keyboard.
 
-- App: <https://docs.melchard.org/flatplan/>
-- Docs: <https://docs.melchard.org/flatplan/docs/> (gestures, floor plan, furniture, layouts,
+- App: <https://docs.melchard.org/flatplan/app/>
+- Docs: <https://docs.melchard.org/flatplan/> (gestures, floor plan, furniture, layouts,
   shortcuts, development, hosting); `?` in the app shows the shortcuts.
 
 ## Quickstart
@@ -34,5 +34,5 @@ The service worker (offline use, install) only registers on HTTPS or localhost.
 ## Hosting
 
 GitHub Pages. Push to `main` → `.github/workflows/pages.yml` stages the app shell, writes a
-`version` file for the in-app update check, renders `docs/` with the org docs action into `/docs/` and deploys.
+`version` file for the in-app update check, renders `docs/` to the site root, stages the app under `app/` and deploys.
 Details in [docs/hosting.md](docs/hosting.md).

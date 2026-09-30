@@ -1041,7 +1041,7 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
       'div',
       { className: 'hint foot' },
       h('span', { innerHTML: kbd('Press [?] anytime to open this. ') }),
-      h('a', { href: 'docs/', target: '_blank', textContent: 'Full documentation' }),
+      h('a', { href: '../', target: '_blank', textContent: 'Full documentation' }),
       ver,
     ),
   )

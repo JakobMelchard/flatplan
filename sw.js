@@ -19,6 +19,8 @@ const SHELL = [
   'src/debug.js',
   'src/editor.js',
   'src/ui.js',
+  'src/feedback.js',
+  'observe.js',
 ]
 
 self.addEventListener('install', (/** @type {any} */ e) => {

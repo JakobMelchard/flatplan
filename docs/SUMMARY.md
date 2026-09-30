@@ -9,6 +9,7 @@
   - [Furniture](furniture.md)
   - [Layouts & data](layouts.md)
   - [Shortcuts](shortcuts.md)
+  - [Feedback](feedback.md)
 
 - Project
   - [Development](development.md)

@@ -2,6 +2,7 @@ import { migrate } from './model.js'
 import { load, save } from './store.js'
 import { Editor } from './editor.js'
 import { buildUI } from './ui.js'
+import { setupFeedback } from './feedback.js'
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id))
 
@@ -35,6 +36,7 @@ document.addEventListener('gesturestart', (e) => e.preventDefault())
 ed.fit()
 ed.setTool('select')
 Object.assign(window, { ed })
+setupFeedback(ed, /** @type {HTMLElement} */ (document.querySelector('#top .hgroup')))
 
 if ('serviceWorker' in navigator && location.hostname !== 'localhost')
   navigator.serviceWorker.register('sw.js')

@@ -62,6 +62,12 @@ test('migrate fills wall ids and openings', () => {
   assert.deepEqual(m.plan.openings, [])
 })
 
+test('rotation changes hit status near walls', () => {
+  const plan = { walls: [wall], openings: [], wallT: 10 }
+  assert.deepEqual(hits(plan, sofa, 200, 70, 0), [])
+  assert.deepEqual(hits(plan, sofa, 200, 70, 90), ['w0'])
+})
+
 test('sat: a wall segment against a selection box', () => {
   const b = box(0, 0, 100)
   assert.equal(

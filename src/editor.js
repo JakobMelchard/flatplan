@@ -916,7 +916,6 @@ export class Editor {
     if (pr?.untoggle && !pr.moved && !cancel)
       return this.select(this.toggled(this.sel, pr.untoggle))
     if (d?.kind === 'turn') {
-      this.unstick(d.it)
       this.changed()
     }
     if (cancel || !pr || pr.moved || pr.multi || e.button > 0 || e.altKey) return

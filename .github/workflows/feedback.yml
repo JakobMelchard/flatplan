@@ -1,6 +1,8 @@
 name: feedback
 
 # Triage issues labeled `feedback` (the in-app Feedback button opens the form) with opencode.
+# Only owners, members and collaborators are heard: anyone else's issue is closed and locked,
+# so a public repo stays contributors-only regardless of GitHub's six-month interaction limits.
 # Needs the repo secret OPENCODE_API_KEY_GHA (OpenCode key for Actions, from Infisical).
 
 permissions:
@@ -19,9 +21,27 @@ on:
 
 jobs:
   triage:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'feedback'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.label.name == 'feedback' &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))
     uses: JakobMelchard/.github/.github/workflows/feedback.yml@main
     with:
       issue: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.issue) || github.event.issue.number }}
     secrets:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY_GHA }}
+
+  refuse:
+    if: >-
+      github.event_name == 'issues' &&
+      github.event.label.name == 'feedback' &&
+      !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          gh issue close "$ISSUE" --comment "Feedback here is limited to collaborators of this repository." --reason "not planned"
+          gh issue lock "$ISSUE" --reason spam

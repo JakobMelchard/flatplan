@@ -1,5 +1,6 @@
 import { layout, asset, uid, blank } from './model.js'
 import { exportFile, readFile, shrinkImage } from './store.js'
+import { startDebugLog } from './debug.js'
 
 /** @typedef {import('./model.js').Project} Project */
 /** @typedef {import('./model.js').Asset} Asset */
@@ -44,6 +45,8 @@ const I = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/>',
   undo: '<path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/>',
   redo: '<path d="M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3"/>',
+  multi:
+    '<rect x="3" y="3" width="11" height="11" rx="1" stroke-dasharray="3 2"/><path d="M13 13l7 3-3 1-1 3z"/>',
   all: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
   left: '<path d="M4 5v14M20 5v14M9 5h6v14H9z"/>',
@@ -344,17 +347,30 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
   const toolBtn = (icon, fn, tip) =>
     h('button', { className: 'tool', type: 'button', title: tip, on: { click: fn } }, svg(icon))
   const undoBtn = toolBtn(I.undo, () => ed.undo(), 'Undo  Ctrl+Z · two-finger tap')
-  const redoBtn = toolBtn(I.redo, () => ed.redo(), 'Redo  Ctrl+Shift+Z · three-finger tap')
+  const redoBtn = toolBtn(I.redo, () => ed.redo(), 'Redo  Shift+Ctrl+Z')
+  const multiBtn = toolBtn(
+    I.multi,
+    () => {
+      if (ed.tool !== 'select') ed.setTool('select')
+      ed.multi = !ed.multi
+      ed.onSelect()
+      ed.hint()
+    },
+    'Multi-select: tap items to add / remove, drag to box-select',
+  )
   undoBtn.setAttribute('data-tip', 'Undo')
   redoBtn.setAttribute('data-tip', 'Redo')
+  multiBtn.setAttribute('data-tip', 'Multi-select')
   const syncTools = () => {
-    toolBtns.forEach((b, i) => b.classList.toggle('on', tools[i][0] === ed.tool))
+    toolBtns.forEach((b, i) => b.classList.toggle('on', tools[i][0] === ed.tool && !ed.multi))
+    multiBtn.classList.toggle('on', ed.multi && ed.tool === 'select')
     undoBtn.disabled = !ed.hist.undos.length
     redoBtn.disabled = !ed.hist.redos.length
   }
   const $ = (/** @type {string} */ s) => /** @type {HTMLElement} */ (main.querySelector(s))
   $('#toolbar').append(
     toolBtns[0],
+    multiBtn,
     h('span', { className: 'sep' }),
     ...toolBtns.slice(1, 4),
     h('span', { className: 'sep' }),
@@ -362,6 +378,58 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
     h('span', { className: 'sep' }),
     undoBtn,
     redoBtn,
+  )
+
+  // after an undo / redo: say what happened and offer the opposite, so redo is findable
+  const toast = $('#toast')
+  let toastT = 0
+  /**
+   * @param {string} text
+   * @param {HTMLElement} action
+   * @param {number} [ms] auto-hide after, 0 = stay
+   */
+  const notify = (text, action, ms = 4000) => {
+    toast.replaceChildren(h('span', { textContent: text }), action)
+    toast.hidden = false
+    clearTimeout(toastT)
+    if (ms) toastT = window.setTimeout(() => (toast.hidden = true), ms)
+  }
+  ed.onHistory = (did) =>
+    did === 'undo'
+      ? notify(
+          'Undone',
+          btn('Redo', () => ed.redo(), { icon: I.redo, cls: 'ghost' }),
+        )
+      : notify(
+          'Redone',
+          btn('Undo', () => ed.undo(), { icon: I.undo, cls: 'ghost' }),
+        )
+
+  // An app opened from the home screen resumes the old page instead of reloading, so check the
+  // served commit when it comes back to the foreground and offer a reload after a deploy.
+  const ver = h('div', { className: 'hint' })
+  /** @type {string | null} */
+  let running = null
+  const checkVersion = async () => {
+    try {
+      /** @type {{ version: string, debug: boolean }} */
+      const v = await (await fetch('version', { cache: 'no-store' })).json()
+      if (running === null) {
+        running = v.version
+        ver.textContent = `Version ${v.version || 'unknown'}`
+        if (v.debug) startDebugLog(ed, v.version)
+      } else if (v.version && v.version !== running)
+        notify(
+          'Update available',
+          btn('Reload', () => location.reload(), { icon: I.reset, cls: 'ghost' }),
+          0,
+        )
+    } catch {} // offline, or a static host without /version
+  }
+  checkVersion()
+  document.addEventListener(
+    'visibilitychange',
+    () => document.visibilityState === 'visible' && checkVersion(),
   )
 
   const pct = h('span', { className: 'pct' })
@@ -407,9 +475,9 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
     })
   const sep = () => h('span', { className: 'sep' })
   const renderActions = () => {
-    const n = ed.selectedItems().length
+    const n = ed.count()
     const o = ed.selectedOpening()
-    const s = ed.sel
+    const w = ed.selectedWall()
     /** @type {HTMLElement[]} */
     let kids = []
     if (ed.tool === 'wall' && ed.drawPts.length) {
@@ -424,24 +492,7 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         btn('', () => ed.undoPoint(), { icon: I.undo, cls: 'icon', title: 'Undo last corner' }),
         btn('Done', () => ed.endWall(), { icon: I.check, cls: 'pri' }),
       ]
-    } else if (n)
-      kids = [
-        ...(n > 1 ? [h('span', { className: 'count', textContent: `${n}` })] : []),
-        btn('', () => ed.selectAll(), {
-          icon: I.all,
-          cls: 'icon',
-          title: 'Select all items  Ctrl+A',
-        }),
-        sep(),
-        btn('90', () => ed.rotate(-90), { icon: I.rotl, title: 'Rotate −90°  Shift+R' }),
-        btn('15', () => ed.rotate(-15), { icon: I.rotl, title: 'Rotate −15°  Q' }),
-        btn('15', () => ed.rotate(15), { icon: I.rotr, title: 'Rotate +15°  E' }),
-        btn('90', () => ed.rotate(90), { icon: I.rotr, title: 'Rotate +90°  R' }),
-        sep(),
-        btn('', () => ed.dup(), { icon: I.copy, cls: 'icon', title: 'Duplicate  Ctrl+D' }),
-        btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: 'Delete  Del' }),
-      ]
-    else if (o)
+    } else if (o)
       kids = [
         ...(o.kind === 'door'
           ? [
@@ -454,8 +505,7 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
           : []),
         btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: `Delete ${o.kind}` }),
       ]
-    else if (s?.kind === 'wall') {
-      const w = p().plan.walls[s.i]
+    else if (w) {
       const m = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }
       kids = [
         btn('Door', () => ed.addOpening('door', m), { icon: I.door }),
@@ -463,7 +513,23 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         sep(),
         btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: 'Delete wall' }),
       ]
-    }
+    } else if (n)
+      kids = [
+        ...(n > 1 ? [h('span', { className: 'count', textContent: `${n}` })] : []),
+        btn('', () => ed.selectAll(), {
+          icon: I.all,
+          cls: 'icon',
+          title: 'Select everything  Ctrl+A',
+        }),
+        sep(),
+        btn('90', () => ed.rotate(-90), { icon: I.rotl, title: 'Rotate −90°  Shift+R' }),
+        btn('15', () => ed.rotate(-15), { icon: I.rotl, title: 'Rotate −15°  Q' }),
+        btn('15', () => ed.rotate(15), { icon: I.rotr, title: 'Rotate +15°  E' }),
+        btn('90', () => ed.rotate(90), { icon: I.rotr, title: 'Rotate +90°  R' }),
+        sep(),
+        btn('', () => ed.dup(), { icon: I.copy, cls: 'icon', title: 'Duplicate  Ctrl+D' }),
+        btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: 'Delete  Del' }),
+      ]
     actions.replaceChildren(...kids)
     actions.hidden = !kids.length
   }
@@ -747,23 +813,31 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         ),
         btn('Edit item', () => openDlg(a), { icon: I.edit }),
       )
-    } else if (ed.selectedItems().length > 1) {
+    } else if (ed.count() > 1) {
       const its = ed.selectedItems()
+      const sel = /** @type {import('./editor.js').SelSet} */ (ed.sel)
+      /** @type {[number, string, string?][]} */
+      const kinds = [
+        [its.length, 'item'],
+        [sel.walls.length, 'wall'],
+        [sel.opens.length, 'door / window', 'doors / windows'],
+      ]
+      const parts = kinds
+        .filter(([n]) => n)
+        .map(([n, one, many]) => `${n} ${n === 1 ? one : (many ?? `${one}s`)}`)
       const bad = its.filter((i) => ed.collides(i, i.x, i.y, i.rot)).length
       insp.replaceChildren(
         h(
           'div',
           {},
-          h('div', { className: 'title', textContent: `${its.length} items` }),
+          h('div', { className: 'title', textContent: `${ed.count()} selected` }),
           h('div', {
             className: `sub ${bad ? 'warn' : ''}`,
-            textContent: bad
-              ? `${bad} overlap a wall`
-              : 'Move, rotate, duplicate or delete together',
+            textContent: bad ? `${bad} overlap a wall` : parts.join(', '),
           }),
         ),
       )
-    } else if (ed.sel?.kind === 'open') {
+    } else if (ed.selectedOpening()) {
       const o = /** @type {import('./model.js').Opening} */ (ed.selectedOpening())
       const G = ed.geom(o)
       insp.replaceChildren(
@@ -786,8 +860,8 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
           ),
         ),
       )
-    } else if (ed.sel?.kind === 'wall') {
-      const w = p().plan.walls[ed.sel.i]
+    } else if (ed.selectedWall()) {
+      const w = /** @type {import('./model.js').Wall} */ (ed.selectedWall())
       insp.replaceChildren(
         h(
           'div',
@@ -911,8 +985,16 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         row('pinch', 'Zoom and pan with two fingers'),
         row('Pencil', 'Once used, only the Pencil places points; fingers pan and zoom'),
         row('handle', 'Drag the dot above an item to rotate (15° steps)'),
-        row('two / three-finger tap', 'Undo / redo'),
-        row('long-press', 'On an item: add to / remove from selection. On empty space: drag a box'),
+        row('two-finger tap', 'Undo; the pill that appears offers Redo (also the toolbar arrows)'),
+        row(
+          'multi-select button',
+          'Next to Select: taps add / remove furniture, walls, doors; drag draws a box',
+        ),
+        row(
+          'long-press',
+          'Same without the button: on something toggles it, on empty space starts a box',
+        ),
+        row('selected wall', 'Drag it to move; walls joined to it stretch along'),
       ),
       col(
         'Walls',
@@ -960,6 +1042,7 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
       { className: 'hint foot' },
       h('span', { innerHTML: kbd('Press [?] anytime to open this. ') }),
       h('a', { href: 'docs/', target: '_blank', textContent: 'Full documentation' }),
+      ver,
     ),
   )
   body.append(help)

@@ -7,16 +7,19 @@ import { History } from './history.js'
 /** @typedef {import('./model.js').Item} Item */
 /** @typedef {import('./model.js').Opening} Opening */
 /** @typedef {'select' | 'wall' | 'door' | 'window' | 'scale'} Tool */
-/** @typedef {{ kind: 'items', ids: string[] } | { kind: 'wall', i: number } | { kind: 'open', id: string } | null} Sel */
+/** @typedef {{ items: string[], walls: string[], opens: string[] }} SelSet ids by kind */
+/** @typedef {SelSet | null} Sel */
+/** @typedef {{ kind: 'items' | 'walls' | 'opens', id: string }} Hit */
 /**
- * `items`: the grabbed item follows the pointer at offset (dx, dy), the rest of the selection
- * keeps its offset to it; start holds every item's position when the drag began.
+ * `move`: the selection follows the pointer; (ax, ay) is the anchor (grabbed item or press
+ * point) at offset (dx, dy) from the pointer, start / pstart the item / wall point positions
+ * when the drag began, cur the offset applied so far.
  * @typedef {{ kind: 'pan', sx: number, sy: number, ox: number, oy: number }
- *   | { kind: 'items', grab: Item, its: Item[], start: Pt[], dx: number, dy: number }
+ *   | { kind: 'move', its: Item[], start: Pt[], pts: Pt[], pstart: Pt[], single: Item | null, ax: number, ay: number, dx: number, dy: number, cur: Pt }
  *   | { kind: 'turn', it: Item, rot0: number }
  *   | { kind: 'open', o: Opening, dt: number, t0: number }
  *   | { kind: 'pinch', d0: number, k0: number, wx: number, wy: number }
- *   | { kind: 'marquee', a: Pt, b: Pt, base: string[] }
+ *   | { kind: 'marquee', a: Pt, b: Pt, base: Sel }
  *   | null} Drag
  */
 
@@ -91,9 +94,15 @@ export class Editor {
   sel = null
   /** Set once an Apple Pencil (or any pen) is used: from then on only the pen places points. */
   penSeen = false
+  /** Multi-select mode (toolbar toggle): taps add / remove items, drag on empty space boxes. */
+  multi = false
+  /** @type {{ at: Pt, t: number } | null} ring shown where a long-press registered */
+  pulse = null
   onChange = () => {}
   onSelect = () => {}
   onView = () => {}
+  /** @type {(did: 'undo' | 'redo') => void} */
+  onHistory = () => {}
   /** @type {(hint: string, coords: string) => void} */
   status = () => {}
   /** @type {(measured: number) => Promise<number | null>} asks the real length (cm) of a marked segment */
@@ -111,7 +120,10 @@ export class Editor {
   mods = { shift: false, ctrl: false }
   /** @type {Map<number, { x: number, y: number, sx: number, sy: number, type: string }>} */
   ptrs = new Map()
-  /** @type {{ x: number, y: number, type: string, moved: boolean, multi: boolean } | null} */
+  /**
+   * untoggle: in multi mode a tap (no drag) on an already selected thing deselects it on release
+   * @type {{ x: number, y: number, type: string, moved: boolean, multi: boolean, untoggle?: Hit } | null}
+   */
   press = null
   /** multi-finger gesture: start time, most fingers down, whether any finger travelled */
   gest = { t0: 0, max: 0, moved: false }
@@ -137,6 +149,11 @@ export class Editor {
     cv.addEventListener('pointerleave', (e) => {
       if (e.pointerType !== 'touch' && !this.ptrs.size) ((this.cur = null), this.render())
     })
+    // iPad Safari's own long-press / double-tap handling can cancel pointers mid-gesture;
+    // pointer events keep arriving when the touch events are default-prevented
+    for (const t of ['touchstart', 'touchmove', 'touchend'])
+      cv.addEventListener(t, (e) => e.preventDefault(), { passive: false })
+    cv.addEventListener('contextmenu', (e) => e.preventDefault())
     cv.addEventListener('dblclick', () => this.endWall())
     cv.addEventListener('wheel', (e) => this.wheel(e), { passive: false })
     window.addEventListener('keydown', (e) => this.key(e))
@@ -234,7 +251,7 @@ export class Editor {
     }
     this.clampOpening(o)
     this.openings().push(o)
-    this.sel = { kind: 'open', id: o.id }
+    this.setSel({ opens: [o.id] })
     this.changed()
   }
   /** @param {Opening} o */
@@ -245,12 +262,6 @@ export class Editor {
     o.w = Math.min(o.w, L)
     o.t = Math.max(o.w / 2, Math.min(L - o.w / 2, o.t))
   }
-  /** @returns {Opening | undefined} */
-  selectedOpening() {
-    const s = this.sel
-    return s?.kind === 'open' ? this.openings().find((o) => o.id === s.id) : undefined
-  }
-
   // ---- public ops
   /** @param {Tool} t */
   setTool(t) {
@@ -263,35 +274,97 @@ export class Editor {
     this.hint()
     this.render()
   }
-  /** @returns {Item[]} selected items, in drawing order */
-  selectedItems() {
+  // ---- selection: any mix of items, walls and openings, by id
+  /** @returns {number} */
+  count() {
     const s = this.sel
-    return s?.kind === 'items' ? layout(this.p).items.filter((i) => s.ids.includes(i.id)) : []
+    return s ? s.items.length + s.walls.length + s.opens.length : 0
   }
-  /** @returns {Item | undefined} the selected item when exactly one is selected */
-  selected() {
-    const its = this.selectedItems()
-    return its.length === 1 ? its[0] : undefined
+  /** @param {Partial<SelSet> | null} s */
+  setSel(s) {
+    const n = { items: s?.items ?? [], walls: s?.walls ?? [], opens: s?.opens ?? [] }
+    this.sel = n.items.length + n.walls.length + n.opens.length ? n : null
   }
-  /** @param {string[]} ids */
-  selectItems(ids) {
-    this.sel = ids.length ? { kind: 'items', ids } : null
+  /** @param {Partial<SelSet> | null} s */
+  select(s) {
+    this.setSel(s)
     this.onSelect()
     this.hint()
     this.render()
   }
+  /**
+   * The selection with hit added, or removed when already in it.
+   * @param {SelSet | null} s
+   * @param {Hit} hit
+   * @returns {SelSet}
+   */
+  toggled(s, hit) {
+    const n = {
+      items: [...(s?.items ?? [])],
+      walls: [...(s?.walls ?? [])],
+      opens: [...(s?.opens ?? [])],
+    }
+    const list = n[hit.kind]
+    n[hit.kind] = list.includes(hit.id) ? list.filter((i) => i !== hit.id) : [...list, hit.id]
+    return n
+  }
+  /** @returns {Item[]} selected items, in drawing order */
+  selectedItems() {
+    const s = this.sel
+    return s ? layout(this.p).items.filter((i) => s.items.includes(i.id)) : []
+  }
+  /** @returns {import('./model.js').Wall[]} */
+  selectedWalls() {
+    const s = this.sel
+    return s ? this.p.plan.walls.filter((w) => s.walls.includes(w.id ?? '')) : []
+  }
+  /** @returns {Item | undefined} the selected item when it is the whole selection */
+  selected() {
+    return this.count() === 1 ? this.selectedItems()[0] : undefined
+  }
+  /** @returns {Opening | undefined} the selected door / window when it is the whole selection */
+  selectedOpening() {
+    const s = this.sel
+    return this.count() === 1 && s?.opens.length
+      ? this.openings().find((o) => o.id === s.opens[0])
+      : undefined
+  }
+  /** @returns {import('./model.js').Wall | undefined} the selected wall when it is the whole selection */
+  selectedWall() {
+    return this.count() === 1 ? this.selectedWalls()[0] : undefined
+  }
   selectAll() {
-    this.selectItems(layout(this.p).items.map((i) => i.id))
+    this.select({
+      items: layout(this.p).items.map((i) => i.id),
+      walls: this.p.plan.walls.map((w) => w.id ?? ''),
+      opens: this.openings().map((o) => o.id),
+    })
   }
   /** Drop selection entries that no longer exist (after undo, delete, layout switch). */
   cleanSel() {
     const s = this.sel
-    if (s?.kind === 'items') {
-      const have = new Set(layout(this.p).items.map((i) => i.id))
-      const ids = s.ids.filter((id) => have.has(id))
-      this.sel = ids.length ? { kind: 'items', ids } : null
-    } else if (s?.kind === 'wall' && !this.p.plan.walls[s.i]) this.sel = null
-    else if (s?.kind === 'open' && !this.selectedOpening()) this.sel = null
+    if (!s) return
+    const items = new Set(layout(this.p).items.map((i) => i.id))
+    const walls = new Set(this.p.plan.walls.map((w) => w.id))
+    const opens = new Set(this.openings().map((o) => o.id))
+    this.setSel({
+      items: s.items.filter((i) => items.has(i)),
+      walls: s.walls.filter((i) => walls.has(i)),
+      opens: s.opens.filter((i) => opens.has(i)),
+    })
+  }
+  /**
+   * Wall end points that move with the selected walls: their own, plus the ends of unselected
+   * walls touching them, so connected walls stretch instead of coming apart. Each point object
+   * once (walls drawn in one go share them).
+   * @returns {Pt[]}
+   */
+  movingPoints() {
+    const own = this.selectedWalls().flatMap((w) => [w.a, w.b])
+    const pts = new Set(own)
+    for (const w of this.p.plan.walls)
+      for (const q of [w.a, w.b]) if (own.some((o) => dist(o, q) < 0.5)) pts.add(q)
+    return [...pts]
   }
   /**
    * @param {string} assetId
@@ -303,26 +376,31 @@ export class Editor {
     const it = { id: uid(), asset: assetId, x: Math.round(c.x), y: Math.round(c.y), rot: 0 }
     layout(this.p).items.push(it)
     this.unstick(it)
-    this.sel = { kind: 'items', ids: [it.id] }
+    this.setSel({ items: [it.id] })
     this.changed()
   }
   /**
-   * Rotate the selection; several items turn as a group around their common centre.
+   * Rotate the selection; a group turns around its common centre (walls included).
    * @param {number} deg
    */
   rotate(deg) {
     const its = this.selectedItems()
-    if (!its.length) return
-    const cx = its.reduce((s, i) => s + i.x, 0) / its.length
-    const cy = its.reduce((s, i) => s + i.y, 0) / its.length
+    const pts = this.movingPoints()
+    if (!its.length && !pts.length) return
+    const all = [...its, ...pts]
+    const cx = all.reduce((s, q) => s + q.x, 0) / all.length
+    const cy = all.reduce((s, q) => s + q.y, 0) / all.length
     const r = (deg * Math.PI) / 180
+    /** @param {Pt} q */
+    const turn = (q) => {
+      const dx = q.x - cx
+      const dy = q.y - cy
+      q.x = Math.round((cx + dx * Math.cos(r) - dy * Math.sin(r)) * 10) / 10
+      q.y = Math.round((cy + dx * Math.sin(r) + dy * Math.cos(r)) * 10) / 10
+    }
+    pts.forEach(turn)
     for (const it of its) {
-      if (its.length > 1) {
-        const dx = it.x - cx
-        const dy = it.y - cy
-        it.x = Math.round((cx + dx * Math.cos(r) - dy * Math.sin(r)) * 10) / 10
-        it.y = Math.round((cy + dx * Math.sin(r) + dy * Math.cos(r)) * 10) / 10
-      }
+      if (all.length > 1) turn(it)
       it.rot = (((it.rot + deg) % 360) + 360) % 360
       this.unstick(it)
     }
@@ -333,9 +411,9 @@ export class Editor {
    * @param {number} dy
    */
   nudge(dx, dy) {
-    const its = this.selectedItems()
-    if (!its.length) return
-    for (const it of its) ((it.x += dx), (it.y += dy))
+    const all = [...this.selectedItems(), ...this.movingPoints()]
+    if (!all.length) return
+    for (const q of all) ((q.x += dx), (q.y += dy))
     this.changed()
   }
   /**
@@ -355,26 +433,49 @@ export class Editor {
         }
       }
   }
+  /** Delete the selection; openings go with their walls. */
   del() {
     const s = this.sel
-    if (s?.kind === 'items') {
-      const l = layout(this.p)
-      l.items = l.items.filter((i) => !s.ids.includes(i.id))
-    } else if (s?.kind === 'wall') {
-      const [w] = this.p.plan.walls.splice(s.i, 1)
-      this.p.plan.openings = this.openings().filter((o) => o.wall !== w.id)
-    } else if (s?.kind === 'open')
-      this.p.plan.openings = this.openings().filter((o) => o.id !== s.id)
+    if (!s) return
+    const l = layout(this.p)
+    l.items = l.items.filter((i) => !s.items.includes(i.id))
+    const walls = new Set(s.walls)
+    this.p.plan.walls = this.p.plan.walls.filter((w) => !walls.has(w.id ?? ''))
+    this.p.plan.openings = this.openings().filter(
+      (o) => !walls.has(o.wall) && !s.opens.includes(o.id),
+    )
     this.sel = null
     this.changed()
   }
+  /** Duplicate items and walls (with their openings) 20 cm down-right; select the copies. */
   dup() {
     const its = this.selectedItems()
-    if (!its.length) return
+    const walls = this.selectedWalls()
+    if (!its.length && !walls.length) return
     const copies = its.map((it) => ({ ...it, id: uid(), x: it.x + 20, y: it.y + 20 }))
     layout(this.p).items.push(...copies)
     for (const c of copies) this.unstick(c)
-    this.sel = { kind: 'items', ids: copies.map((c) => c.id) }
+    /** @type {Map<string, string>} old wall id → copy id */
+    const ids = new Map()
+    /** @type {Map<Pt, Pt>} shared corners stay shared in the copy */
+    const pts = new Map()
+    /** @param {Pt} q */
+    const pt = (q) => pts.get(q) ?? pts.set(q, { x: q.x + 20, y: q.y + 20 }).get(q) ?? q
+    const wcopies = walls.map((w) => {
+      const id = uid()
+      ids.set(w.id ?? '', id)
+      return { id, a: pt(w.a), b: pt(w.b) }
+    })
+    this.p.plan.walls.push(...wcopies)
+    const ocopies = this.openings()
+      .filter((o) => ids.has(o.wall))
+      .map((o) => ({ ...o, id: uid(), wall: /** @type {string} */ (ids.get(o.wall)) }))
+    this.openings().push(...ocopies)
+    this.setSel({
+      items: copies.map((c) => c.id),
+      walls: wcopies.map((w) => w.id),
+      opens: ocopies.map((o) => o.id),
+    })
     this.changed()
   }
   fit() {
@@ -434,10 +535,14 @@ export class Editor {
     this.restoring = false
   }
   undo() {
-    this.restore(this.hist.undo())
+    const p = this.hist.undo()
+    this.restore(p)
+    if (p) this.onHistory('undo')
   }
   redo() {
-    this.restore(this.hist.redo())
+    const p = this.hist.redo()
+    this.restore(p)
+    if (p) this.onHistory('redo')
   }
 
   // ---- pointer events: mouse, touch (pinch/pan with two fingers) and pen share one path.
@@ -470,89 +575,134 @@ export class Editor {
     this.pick(p, e)
   }
   /**
-   * Select tool: grab the rotation handle, an item, an opening or a wall; else pan, or start
-   * a marquee (pen, Shift + mouse, touch long-press).
+   * What is under p: the topmost item, else a door / window, else a wall.
+   * @param {Pt} p
+   * @param {string} type pointer type
+   * @returns {Hit | null}
+   */
+  hitTest(p, type) {
+    const grow = type === 'touch' ? 4 / this.k : 0
+    const it = layout(this.p).items.findLast((it) => {
+      const a = asset(this.p, it.asset)
+      const l = toLocal(it, it.rot, p)
+      return a && Math.abs(l.x) <= a.w / 2 + grow && Math.abs(l.y) <= a.d / 2 + grow
+    })
+    if (it) return { kind: 'items', id: it.id }
+    const near = Math.max(this.wallT() / 2, this.slop(type))
+    const o = this.openings().find((o) => {
+      const g = this.geom(o)
+      if (!g) return false
+      const t = projT(p, g.w.a, g.w.b) * g.L
+      return segDist(p, g.w.a, g.w.b) < near && t >= g.t0 && t <= g.t1
+    })
+    if (o) return { kind: 'opens', id: o.id }
+    const w = this.p.plan.walls.find((w) => segDist(p, w.a, w.b) < near)
+    return w ? { kind: 'walls', id: w.id ?? '' } : null
+  }
+  /**
+   * Select tool: grab the rotation handle, or pick what is under the pointer; on empty space
+   * pan, or box-select (multi mode, modifier, Pencil, touch long-press).
+   * Items drag right away; a wall only once it was already selected (so a finger resting on a
+   * wall to pan does not move it); a lone door / window slides along its wall.
    * @param {Pt} p
    * @param {PointerEvent} e
    */
   pick(p, e) {
-    const slop = this.slop(e.pointerType)
-    const toggle = e.shiftKey || e.metaKey || e.ctrlKey
+    const add = e.shiftKey || e.metaKey || e.ctrlKey
+    const multi = add || this.multi
     const cur = this.selected()
     const ca = cur && asset(this.p, cur.asset)
-    if (cur && ca && !toggle) {
+    if (cur && ca && !add) {
       const l = toLocal(cur, cur.rot, p)
+      const slop = this.slop(e.pointerType)
       if (Math.hypot(l.x, l.y + ca.d / 2 + TURN_PX / this.k) < Math.max(slop, 10 / this.k)) {
         this.drag = { kind: 'turn', it: cur, rot0: cur.rot }
         return this.render()
       }
     }
-    const items = layout(this.p).items
-    const grow = e.pointerType === 'touch' ? 4 / this.k : 0
-    const hit = items.findLast((it) => {
-      const a = asset(this.p, it.asset)
-      const l = toLocal(it, it.rot, p)
-      return a && Math.abs(l.x) <= a.w / 2 + grow && Math.abs(l.y) <= a.d / 2 + grow
-    })
-    if (hit) {
-      const ids = this.sel?.kind === 'items' ? this.sel.ids : []
-      if (toggle) {
-        this.selectItems(ids.includes(hit.id) ? ids.filter((i) => i !== hit.id) : [...ids, hit.id])
-        return
-      }
-      // grabbing part of a multi-selection moves all of it
-      if (!ids.includes(hit.id)) this.sel = { kind: 'items', ids: [hit.id] }
-      items.push(...items.splice(items.indexOf(hit), 1)) // raise to top
-      const its = this.selectedItems()
-      this.drag = {
-        kind: 'items',
-        grab: hit,
-        its,
-        start: its.map((i) => ({ x: i.x, y: i.y })),
-        dx: hit.x - p.x,
-        dy: hit.y - p.y,
-      }
-      // touch long-press without moving: add to / remove from the selection instead
-      if (e.pointerType === 'touch')
-        this.holdFor(() => {
-          this.drag = null
-          this.selectItems(
-            ids.includes(hit.id) ? ids.filter((i) => i !== hit.id) : [...ids, hit.id],
-          )
-        })
-      this.onSelect()
-      return this.render()
-    }
-    const near = Math.max(this.wallT() / 2, slop)
-    for (const o of this.openings()) {
-      const g = this.geom(o)
-      if (!g) continue
-      const t = projT(p, g.w.a, g.w.b) * g.L
-      if (segDist(p, g.w.a, g.w.b) < near && t >= g.t0 && t <= g.t1) {
-        this.sel = { kind: 'open', id: o.id }
-        this.drag = { kind: 'open', o, dt: o.t - t, t0: o.t }
-        this.onSelect()
-        return this.render()
-      }
-    }
-    const wi = this.p.plan.walls.findIndex((w) => segDist(p, w.a, w.b) < near)
-    if (wi < 0 && (e.pointerType === 'pen' || toggle)) return this.marquee(p, toggle)
-    if (!toggle) this.sel = wi >= 0 ? { kind: 'wall', i: wi } : null
-    this.onSelect()
-    if (wi < 0) {
+    const hit = this.hitTest(p, e.pointerType)
+    if (!hit) {
+      if (multi) return this.marquee(p, true)
+      if (e.pointerType === 'pen') return this.marquee(p, false)
+      this.select(null)
       this.pan(e)
-      if (e.pointerType === 'touch') this.holdFor(() => this.marquee(p, true))
+      if (e.pointerType === 'touch') this.holdFor(() => this.marquee(p, true), p)
+      return
     }
+    const before = this.sel
+    const inSel = !!before?.[hit.kind].includes(hit.id)
+    if (add) return this.select(this.toggled(before, hit)) // mouse modifier: toggle only
+    if (this.multi) {
+      // tap adds; releasing an already selected one without dragging drops it
+      if (!inSel) this.setSel(this.toggled(before, hit))
+      else if (this.press) this.press.untoggle = hit
+    } else if (!inSel) this.setSel({ [hit.kind]: [hit.id] })
+    if (hit.kind === 'items') {
+      const items = layout(this.p).items
+      const i = items.findIndex((it) => it.id === hit.id)
+      items.push(...items.splice(i, 1)) // raise to top
+    }
+    const o = hit.kind === 'opens' && this.selectedOpening()
+    if (o) {
+      const g = this.geom(o)
+      const t = g ? projT(p, g.w.a, g.w.b) * g.L : o.t
+      this.drag = { kind: 'open', o, dt: o.t - t, t0: o.t }
+    } else if (hit.kind === 'items' || inSel) this.startMove(p, hit)
+    else this.pan(e) // an unselected wall / opening: select it, the drag pans
+    // touch long-press without moving: toggle it in the selection as it was before this press
+    if (e.pointerType === 'touch' && !this.multi)
+      this.holdFor(() => {
+        this.drag = null
+        this.flash(p)
+        this.select(this.toggled(before, hit))
+      })
+    this.onSelect()
     this.render()
+  }
+  /**
+   * Begin moving the whole selection. The grabbed item is the anchor for snapping.
+   * @param {Pt} p
+   * @param {Hit} hit
+   */
+  startMove(p, hit) {
+    const its = this.selectedItems()
+    const pts = this.movingPoints()
+    const grab = hit.kind === 'items' ? its.find((i) => i.id === hit.id) : undefined
+    const ax = grab?.x ?? p.x
+    const ay = grab?.y ?? p.y
+    this.drag = {
+      kind: 'move',
+      its,
+      start: its.map((i) => ({ x: i.x, y: i.y })),
+      pts,
+      pstart: pts.map((q) => ({ x: q.x, y: q.y })),
+      single: its.length === 1 && !pts.length ? its[0] : null,
+      ax,
+      ay,
+      dx: ax - p.x,
+      dy: ay - p.y,
+      cur: { x: 0, y: 0 },
+    }
+  }
+  /**
+   * Brief ring at p: feedback that a long-press registered.
+   * @param {Pt} p
+   */
+  flash(p) {
+    this.pulse = { at: p, t: performance.now() }
+    this.render()
+    setTimeout(() => ((this.pulse = null), this.render()), 350)
   }
   /**
    * Run fn if the single pointer stays put for HOLD_MS.
    * @param {() => void} fn
+   * @param {Pt} [at] where to show the long-press ring
    */
-  holdFor(fn) {
+  holdFor(fn, at) {
     this.hold = window.setTimeout(() => {
       if (this.ptrs.size === 1 && this.press && !this.press.moved) {
         this.press.moved = true // the eventual pointer up is not a tap
+        if (at) this.flash(at)
         fn()
       }
     }, HOLD_MS)
@@ -562,7 +712,7 @@ export class Editor {
    * @param {boolean} add keep the current selection
    */
   marquee(p, add) {
-    const base = add && this.sel?.kind === 'items' ? this.sel.ids : []
+    const base = add ? this.sel : null
     this.drag = { kind: 'marquee', a: p, b: p, base }
     this.render()
   }
@@ -573,8 +723,10 @@ export class Editor {
   startPinch() {
     // a one-finger drag that turns into a pinch is undone
     const d = this.drag
-    if (d?.kind === 'items')
+    if (d?.kind === 'move') {
       d.its.forEach((it, i) => ((it.x = d.start[i].x), (it.y = d.start[i].y)))
+      d.pts.forEach((q, i) => ((q.x = d.pstart[i].x), (q.y = d.pstart[i].y)))
+    }
     if (d?.kind === 'turn') d.it.rot = d.rot0
     if (d?.kind === 'open') d.o.t = d.t0
     if (this.press) this.press.multi = true
@@ -623,12 +775,14 @@ export class Editor {
         this.oy = d.oy + e.clientY - d.sy
         this.onView()
       }
-    } else if (d?.kind === 'items') {
-      if (pr?.moved) this.dragItems(d, p)
+    } else if (d?.kind === 'move') {
+      if (pr?.moved) this.dragMove(d, p)
     } else if (d?.kind === 'marquee') {
       d.b = p
-      const ids = this.inRect(d.a, d.b)
-      this.sel = { kind: 'items', ids: [...new Set([...d.base, ...ids])] }
+      const r = this.inRect(d.a, d.b)
+      /** @param {'items' | 'walls' | 'opens'} k */
+      const both = (k) => [...new Set([...(d.base?.[k] ?? []), ...r[k]])]
+      this.setSel({ items: both('items'), walls: both('walls'), opens: both('opens') })
       this.onSelect()
     } else if (d?.kind === 'turn') {
       const deg = (Math.atan2(p.y - d.it.y, p.x - d.it.x) * 180) / Math.PI + 90
@@ -647,10 +801,10 @@ export class Editor {
     this.render()
   }
   /**
-   * Ids of items whose footprint touches the rectangle ab.
+   * Everything touching the rectangle ab: item footprints, wall segments, opening spans.
    * @param {Pt} a
    * @param {Pt} b
-   * @returns {string[]}
+   * @returns {SelSet}
    */
   inRect(a, b) {
     const x0 = Math.min(a.x, b.x)
@@ -663,27 +817,51 @@ export class Editor {
       { x: x1, y: y1 },
       { x: x0, y: y1 },
     ]
-    return layout(this.p)
-      .items.filter((it) => {
-        const as = asset(this.p, it.asset)
-        return as && sat(footprint(as, it.x, it.y, it.rot), box)
-      })
-      .map((it) => it.id)
+    return {
+      items: layout(this.p)
+        .items.filter((it) => {
+          const as = asset(this.p, it.asset)
+          return as && sat(footprint(as, it.x, it.y, it.rot), box)
+        })
+        .map((it) => it.id),
+      walls: this.p.plan.walls.filter((w) => sat([w.a, w.b], box)).map((w) => w.id ?? ''),
+      opens: this.openings()
+        .filter((o) => {
+          const g = this.geom(o)
+          return g && sat([g.at(g.t0), g.at(g.t1)], box)
+        })
+        .map((o) => o.id),
+    }
   }
   /**
-   * Move the selection rigidly. The grabbed item snaps to wall faces when it is alone.
-   * Swept so fast drags can't tunnel through walls, then slides along x / y; items may leave
-   * obstacles they are already in, never enter new ones.
-   * @param {Extract<Drag, { kind: 'items' }>} d
+   * Move the selection rigidly by the pointer offset. A lone item snaps to wall faces. Items
+   * are swept so fast drags can't tunnel through walls, then slide along x / y; they may leave
+   * obstacles they are already in, never enter new ones. With walls in the selection the plan
+   * itself is moving, so it just follows the pointer.
+   * @param {Extract<Drag, { kind: 'move' }>} d
    * @param {Pt} p
    */
-  dragItems(d, p) {
+  dragMove(d, p) {
     const g = this.mods.ctrl ? 0.1 : this.mods.shift ? 10 : 1
-    const gi = d.its.indexOf(d.grab)
-    const s0 = d.start[gi]
     let t = { x: Math.round((p.x + d.dx) / g) * g, y: Math.round((p.y + d.dy) / g) * g }
-    if (d.its.length === 1) t = this.snapToWalls(d.grab, t)
-    const want = { x: t.x - s0.x, y: t.y - s0.y } // offset from the drag start
+    if (d.single) t = this.snapToWalls(d.single, t)
+    const want = { x: t.x - d.ax, y: t.y - d.ay }
+    /** @param {Pt} o */
+    const apply = (o) => {
+      d.its.forEach((it, i) => {
+        it.x = Math.round((d.start[i].x + o.x) * 10) / 10
+        it.y = Math.round((d.start[i].y + o.y) * 10) / 10
+      })
+      d.pts.forEach((q, i) => {
+        q.x = Math.round((d.pstart[i].x + o.x) * 10) / 10
+        q.y = Math.round((d.pstart[i].y + o.y) * 10) / 10
+      })
+    }
+    if (d.pts.length) {
+      d.cur = want
+      apply(want)
+      return this.onSelect()
+    }
     /** @param {Pt} o */
     const at = (o) =>
       d.its.map((it, i) => this.hits(it, d.start[i].x + o.x, d.start[i].y + o.y, it.rot))
@@ -703,14 +881,11 @@ export class Editor {
       }
       return ok
     }
-    const now = { x: d.grab.x - s0.x, y: d.grab.y - s0.y }
-    let c = reach(now, want)
+    let c = reach(d.cur, want)
     c = reach(c, { x: want.x, y: c.y })
     c = reach(c, { x: c.x, y: want.y })
-    d.its.forEach((it, i) => {
-      it.x = Math.round((d.start[i].x + c.x) * 10) / 10
-      it.y = Math.round((d.start[i].y + c.y) * 10) / 10
-    })
+    d.cur = c
+    apply(c)
     this.onSelect()
   }
   /**
@@ -737,7 +912,9 @@ export class Editor {
     this.press = null
     this.drag = null
     if (d?.kind === 'marquee') return this.render()
-    if ((d?.kind === 'items' || d?.kind === 'open') && pr?.moved) this.commit()
+    if ((d?.kind === 'move' || d?.kind === 'open') && pr?.moved) this.commit()
+    if (pr?.untoggle && !pr.moved && !cancel)
+      return this.select(this.toggled(this.sel, pr.untoggle))
     if (d?.kind === 'turn') {
       this.unstick(d.it)
       this.changed()
@@ -816,6 +993,7 @@ export class Editor {
     if (cmd && k === 'a' && this.tool === 'select') return (e.preventDefault(), this.selectAll())
     switch (e.key) {
       case 'Escape':
+        this.multi = false
         this.endWall()
         this.scalePts = []
         this.sel = null
@@ -953,13 +1131,17 @@ export class Editor {
           ? `tap two points with a known distance (${this.scalePts.length}/2)`
           : this.tool === 'door' || this.tool === 'window'
             ? `tap a wall to place a ${this.tool}`
-            : this.selectedItems().length > 1
-              ? `${this.selectedItems().length} items · drag to move together`
-              : this.selected()
-                ? 'drag to move · handle rotates · long-press adds more'
-                : this.selectedOpening()
-                  ? 'drag along the wall'
-                  : 'tap to select · long-press + drag to select many · pinch to zoom'
+            : this.multi
+              ? `multi-select (${this.count()}) · tap to add / remove · drag to box`
+              : this.count() > 1
+                ? `${this.count()} selected · drag a selected one to move together`
+                : this.selected()
+                  ? 'drag to move · handle rotates · long-press adds more'
+                  : this.selectedOpening()
+                    ? 'drag along the wall'
+                    : this.selectedWall()
+                      ? 'drag to move the wall · long-press adds more'
+                      : 'tap to select · long-press + drag to select many · pinch to zoom'
     this.status(t, c)
   }
 
@@ -1114,7 +1296,7 @@ export class Editor {
     }
     g.lineCap = 'square'
     this.p.plan.walls.forEach((w, i) => {
-      const on = this.sel?.kind === 'wall' && this.sel.i === i
+      const on = !!this.sel?.walls.includes(w.id ?? '')
       g.strokeStyle = on ? C.acc : C.wall
       g.lineWidth = this.wallT()
       g.beginPath()
@@ -1126,7 +1308,7 @@ export class Editor {
     for (const o of this.openings()) {
       const G = this.geom(o)
       if (!G) continue
-      const on = this.sel?.kind === 'open' && this.sel.id === o.id
+      const on = !!this.sel?.opens.includes(o.id)
       const a = G.at(G.t0)
       const b = G.at(G.t1)
       g.lineCap = 'butt'
@@ -1172,14 +1354,14 @@ export class Editor {
       }
     }
     // items
-    const single = this.sel?.kind === 'items' && this.sel.ids.length === 1
+    const single = !!this.selected()
     for (const it of layout(this.p).items) {
       const a = asset(this.p, it.asset)
       if (!a) continue
       g.save()
       g.translate(it.x, it.y)
       g.rotate((it.rot * Math.PI) / 180)
-      const on = this.sel?.kind === 'items' && this.sel.ids.includes(it.id)
+      const on = !!this.sel?.items.includes(it.id)
       const bad = this.collides(it, it.x, it.y, it.rot)
       g.shadowColor = 'rgba(0,0,0,.5)'
       g.shadowBlur = 10
@@ -1265,6 +1447,13 @@ export class Editor {
       g.lineWidth = 1.5 / k
       g.beginPath()
       g.arc(q.x, q.y, 5 / k, 0, 7)
+      g.stroke()
+    }
+    if (this.pulse) {
+      g.strokeStyle = C.acc
+      g.lineWidth = 3 / k
+      g.beginPath()
+      g.arc(this.pulse.at.x, this.pulse.at.y, 22 / k, 0, 7)
       g.stroke()
     }
     const mq = this.drag

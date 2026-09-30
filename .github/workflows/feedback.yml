@@ -1,6 +1,6 @@
 name: feedback
 
-# Triage issues labeled `feedback` (observe → switchboard) with opencode.
+# Triage issues labeled `feedback` (the in-app Feedback button opens the form) with opencode.
 # Needs the repo secret OPENCODE_API_KEY_GHA (OpenCode key for Actions, from Infisical).
 
 permissions:

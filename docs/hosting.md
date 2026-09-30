@@ -10,7 +10,7 @@ Every push to `main` runs `.github/workflows/pages.yml`:
 
 1. Render `docs/` with the org docs action into the site root.
    Nothing from `node_modules`, `test/` or `serve.js` is published.
-2. Stage the app shell under `app/`: `index.html`, `tokens.css`, `observe.js`, `sw.js`, the manifest, `icons/`, `src/`, plus a `version` file with the deployed commit, which the app polls to offer a reload.
+2. Stage the app shell under `app/`: `index.html`, `tokens.css`, `sw.js`, the manifest, `icons/`, `src/`, plus a `version` file with the deployed commit, which the app polls to offer a reload.
 3. Upload and deploy through `actions/deploy-pages`.
 
 The Environments page of the repo shows what is live and since when.

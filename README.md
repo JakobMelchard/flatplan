@@ -28,7 +28,7 @@ The service worker (offline use, install) only registers on HTTPS or localhost.
 - `index.html` markup and CSS, `tokens.css` vendored org design tokens (never edit)
 - `src/` model, store (IndexedDB, export / import), geometry, history, editor (canvas + input), ui,
   main
-- `sw.js`, `manifest.webmanifest`, `icons/` PWA shell; `observe.js` vendored feedback shim (see docs/feedback.md)
+- `sw.js`, `manifest.webmanifest`, `icons/` PWA shell
 - `serve.js` dev server, `test/` geometry tests, `docs/` source of the docs site
 
 ## Hosting

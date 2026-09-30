@@ -126,3 +126,19 @@ body,
 .navigation:hover {
   color: var(--accent);
 }
+
+/* the search box ships white */
+#book-search-input {
+  background: var(--card);
+  border-color: var(--line);
+}
+
+#book-search-input input,
+#book-search-input input:focus,
+#book-search-input input:hover {
+  color: var(--fg);
+}
+
+#book-search-input input::placeholder {
+  color: var(--muted);
+}

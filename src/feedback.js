@@ -68,8 +68,9 @@ export function setupFeedback(ed, group) {
       h: innerHeight,
       tool: ed.tool,
       pen: ed.penSeen,
+      multi: ed.multi,
       drag: ed.drag?.kind ?? null,
-      sel: ed.sel ? (ed.sel.kind === 'items' ? `items ${ed.sel.ids.length}` : ed.sel.kind) : null,
+      sel: ed.sel ? `${ed.sel.items.length}/${ed.sel.walls.length}/${ed.sel.opens.length}` : null,
       logs: logs.slice(),
     }),
   })

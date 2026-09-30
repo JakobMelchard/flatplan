@@ -25,7 +25,7 @@ export function setupFeedback(ed, group) {
   try {
     token = localStorage.getItem(KEY) ?? token
   } catch {}
-  if (!token) return
+  if (!token) return tokenField()
 
   // the last pointer events with the tool and drag state, so a report says what was happening
   /** @type {LogEntry[]} */
@@ -86,4 +86,39 @@ export function setupFeedback(ed, group) {
     group.prepend(b)
   }
   document.head.append(s)
+}
+
+/**
+ * No token yet: a field in the help dialog. An installed home-screen app cannot receive the
+ * link's fragment (its storage is separate from Safari's), so the token is pasted there once.
+ */
+function tokenField() {
+  const foot = document.querySelector('dialog.help .hint.foot')
+  if (!foot) return
+  const input = Object.assign(document.createElement('input'), {
+    type: 'text',
+    placeholder: 'Feedback token',
+    spellcheck: false,
+    autocapitalize: 'off',
+    autocomplete: 'off',
+  })
+  const enable = Object.assign(document.createElement('button'), {
+    type: 'button',
+    className: 'btn ghost wide',
+    title: 'Enable the Feedback button with a token from a feedback link',
+  })
+  enable.append(Object.assign(document.createElement('span'), { textContent: 'Enable feedback' }))
+  enable.onclick = () => {
+    const v = input.value.trim()
+    if (!v) return input.focus()
+    try {
+      localStorage.setItem(KEY, v)
+    } catch {}
+    location.reload()
+  }
+  const box = Object.assign(document.createElement('div'), { className: 'in' })
+  box.append(input)
+  const row = Object.assign(document.createElement('div'), { className: 'g2' })
+  row.append(box, enable)
+  foot.append(row)
 }

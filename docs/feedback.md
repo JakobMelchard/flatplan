@@ -12,7 +12,9 @@ https://docs.melchard.org/flatplan/#fb=…
 ```
 
 On first open the app stores the token on that device and removes it from the address bar. The
-fragment never reaches a server. The token names the sender (it maps to a name on the receiving
+fragment never reaches a server. An app installed on the home screen has its own storage, so it
+cannot pick the token up from a link opened in Safari: paste it once into the **Feedback token**
+field at the bottom of the `?` help dialog instead. The token names the sender (it maps to a name on the receiving
 side), so one link per person; rotating the token on the receiver revokes that link.
 
 ## What is sent

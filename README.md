@@ -79,15 +79,9 @@ Top bar: tools · layout switcher · zoom/fit · export/import. Left: catalog (f
 
 Model already 3D-ready: `Asset.h`, `Item.{x,y,rot}`, walls as segments. Add `src/view3d.js`: three.js scene, walls → `ExtrudeGeometry` (height 250, thickness 10), items → `BoxGeometry(w,h,d)` at `(x, h/2, y)` rotated `-rot`, or `GLTFLoader` when `Asset.model` (glb data URL) present. Toggle button in `#tools`; re-sync on `Editor.onChange`.
 
-## Hosting (mimi)
+## Hosting (GitHub Pages)
 
-Served on the tailnet at `https://mimi.mermaid-dory.ts.net:5180` from
-`~/Workspaces/JakobMelchard/flatplan.tree/worktrees/prd`, a detached worktree of the mimi clone.
-`com.lilfeelz.flatplan` (LaunchAgent) runs `node serve.js` there on `127.0.0.1:5180`. The
-tailnet port is declared in `JakobMelchard/monitor` `etc/tailscale/serve.toml`; change exposure
-there and run `make tailscale-apply`.
-
-Deploys come from git hooks in the mimi clone's `.git/hooks` (local, not committed, since only
-that host has the worktree): `pre-push` checks out `main` in the worktree when `main` is pushed,
-`post-merge` does it after `git pull` on `main` (PRs merged on GitHub). Reload the app to pick it
-up (the service worker is network-first).
+Served at `https://docs.melchard.org/flatplan/`. Push to `main` → `.github/workflows/pages.yml`
+uploads the app shell (no `node_modules`, `test`, `serve.js`) plus a `version` file with the
+deployed commit, so the in-app update check still offers a reload after a deploy. `serve.js`
+remains for local development only; its `/log` debug endpoint has no Pages equivalent.

@@ -18,7 +18,7 @@ jobs:
       - name: Stage the static app and a version stamp for the in-app update check
         run: |
           mkdir site
-          cp -r index.html sw.js manifest.webmanifest icons src site
+          cp -r index.html tokens.css sw.js manifest.webmanifest icons src site
           printf '{"version":"%s","debug":false}\n' "$(git log -1 --format='%h %s')" > site/version
       - uses: actions/upload-pages-artifact@v3
         with: { path: site }

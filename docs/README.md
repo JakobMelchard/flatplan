@@ -4,7 +4,7 @@
 Draw walls, doors and windows, trace a scanned plan, then arrange furniture that stops at walls
 and door swings. All lengths in cm.
 
-[Open flatplan ↗](https://docs.melchard.org/flatplan/)
+[Open flatplan ↗](https://docs.melchard.org/flatplan/app/)
 
 It is a static web app: vanilla JS with JSDoc types and a Canvas renderer, no build step, no
 runtime dependencies. Installed to the home screen it works offline; everything you draw stays on

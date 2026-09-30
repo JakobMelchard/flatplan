@@ -1,6 +1,6 @@
 # flatplan
 
-- [Open the app ↗](https://docs.melchard.org/flatplan/)
+- [Open the app ↗](https://docs.melchard.org/flatplan/app/)
 
 - [Overview](README.md)
   - [Install & use](install.md)

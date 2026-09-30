@@ -8,7 +8,7 @@ nothing is sent.
 A feedback link is the app URL with a token in the fragment:
 
 ```
-https://docs.melchard.org/flatplan/#fb=…
+https://docs.melchard.org/flatplan/app/#fb=…
 ```
 
 On first open the app stores the token on that device and removes it from the address bar. The

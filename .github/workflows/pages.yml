@@ -21,7 +21,7 @@ jobs:
           cp -r index.html tokens.css sw.js manifest.webmanifest icons src site
           printf '{"version":"%s","debug":false}\n' "$(git log -1 --format='%h %s')" > site/version
       - name: Build the docs site
-        run: npx --yes honkit build docs site/docs
+        run: npx --yes honkit build docs "$PWD/site/docs" # HonKit resolves a relative output path against the book root
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with: { path: site }
       - id: deploy

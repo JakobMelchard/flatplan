@@ -19,7 +19,10 @@ test('blank project has one layout set as current', () => {
 
 test('migrate assigns ids to walls missing one and leaves existing ids alone', () => {
   const p = blank()
-  p.plan.walls = [{ a: { x: 0, y: 0 }, b: { x: 10, y: 0 } }, { id: 'keep', a: { x: 0, y: 0 }, b: { x: 0, y: 10 } }]
+  p.plan.walls = [
+    { a: { x: 0, y: 0 }, b: { x: 10, y: 0 } },
+    { id: 'keep', a: { x: 0, y: 0 }, b: { x: 0, y: 10 } },
+  ]
   delete p.plan.openings
   const m = migrate(p)
   assert.ok(m.plan.walls[0].id)

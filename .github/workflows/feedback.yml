@@ -1,9 +1,9 @@
 name: feedback
 
-# Triage issues labeled `feedback` (the in-app Feedback button opens the form) with opencode.
-# Only owners, members and collaborators are heard: anyone else's issue is closed and locked,
-# so a public repo stays contributors-only regardless of GitHub's six-month interaction limits.
-# Needs the repo secret OPENCODE_API_KEY_GHA (OpenCode key for Actions, from Infisical).
+# Issues labeled `feedback` (the in-app Feedback button opens the form) are triaged by the
+# nightly sweep routine. Only owners, members and collaborators are heard: anyone else's issue
+# is closed and locked, so a public repo stays contributors-only regardless of GitHub's
+# six-month interaction limits.
 
 permissions:
   contents: read
@@ -12,25 +12,8 @@ permissions:
 on:
   issues:
     types: [labeled]
-  workflow_dispatch:
-    inputs:
-      issue:
-        description: Issue number to triage again.
-        type: number
-        required: true
 
 jobs:
-  triage:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.label.name == 'feedback' &&
-       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))
-    uses: JakobMelchard/.github/.github/workflows/feedback.yml@main
-    with:
-      issue: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.issue) || github.event.issue.number }}
-    secrets:
-      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY_GHA }}
-
   refuse:
     if: >-
       github.event_name == 'issues' &&

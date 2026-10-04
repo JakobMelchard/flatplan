@@ -14,6 +14,7 @@ npm start          # static dev server, http://127.0.0.1:5173 (BIND=0.0.0.0 for 
 npm run check      # tsc over JSDoc types
 npm run lint
 npm test           # node --test, pure geometry
+npm run screenshots # docs/screenshots/plan.png from test/fixtures/demo, needs Chromium
 ```
 
 CI runs check, lint and test.

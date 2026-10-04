@@ -1412,6 +1412,8 @@ export class Editor {
         g.font = `500 ${12 / k}px ${C.font}`
         g.textAlign = 'center'
         g.textBaseline = 'middle'
+        // keep the label upright: past 90 degrees it would read upside down
+        if (it.rot > 90 && it.rot <= 270) g.rotate(Math.PI)
         const room = a.w - 8 / k
         g.fillText(fitText(g, a.name, room), 0, a.d * k > 40 ? -7 / k : 0)
         if (a.d * k > 40) {

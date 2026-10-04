@@ -13,7 +13,9 @@ change. flatplan asks for persistent storage so Safari does not evict it. Projec
 versions that used localStorage are migrated on first load.
 
 If the stored project cannot be read at start, flatplan opens a blank project, says so, and saves
-nothing until you reload, so the stored project is not overwritten.
+nothing until you reload, so the stored project is not overwritten. An imported project is not
+saved in that state either: export it before reloading if you want to keep it. Reset does not
+erase the stored project.
 
 The data never leaves the device on its own. Clearing site data in the browser deletes it.
 

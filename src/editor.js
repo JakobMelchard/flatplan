@@ -1,5 +1,16 @@
 import { layout, asset, uid } from './model.js'
-import { dist, projT, segDist, lum, toLocal, openingGeom, hits, footprint, sat } from './geom.js'
+import {
+  dist,
+  projT,
+  segDist,
+  lum,
+  toLocal,
+  openingGeom,
+  hits,
+  footprint,
+  sat,
+  freeSpot,
+} from './geom.js'
 import { History } from './history.js'
 
 /** @typedef {import('./model.js').Project} Project */
@@ -1277,29 +1288,40 @@ export class Editor {
       y: wallPts.reduce((s, q) => s + q.y, 0) / (wallPts.length || 1),
     }
     /**
-     * Length pill beside a wall, on the side away from the plan's centre.
-     * @param {Pt} a
-     * @param {Pt} b
+     * Length pill beside a wall, on the side away from the plan's centre, slid along the wall off
+     * any door that swings to that side.
+     * @param {import('./model.js').Wall} w
      * @param {string} col
      */
-    const label = (a, b, col) => {
-      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    const label = (w, col) => {
+      const { a, b } = w
+      const L = dist(a, b)
       let ang = Math.atan2(b.y - a.y, b.x - a.x)
       if (Math.abs(ang) > Math.PI / 2) ang += Math.PI
-      const outward = (m.x - cen.x) * -Math.sin(ang) + (m.y - cen.y) * Math.cos(ang)
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+      const outward = (mid.x - cen.x) * -Math.sin(ang) + (mid.y - cen.y) * Math.cos(ang)
+      const sgn = outward > 0 ? 1 : -1 // the pill's side; a wall through the centre takes the inner one
+      const side = { x: -Math.sin(ang) * sgn, y: Math.cos(ang) * sgn }
+      const txt = `${L.toFixed(0)} cm`
       g.save()
-      g.translate(m.x, m.y)
-      g.rotate(ang)
-      const txt = `${dist(a, b).toFixed(0)} cm`
       g.font = `500 ${11 / k}px ${C.font}`
       const tw = g.measureText(txt).width
-      g.fillStyle = C.pill
-      g.strokeStyle = C.pillLine
-      g.lineWidth = 1 / k
       const rx = -tw / 2 - 5 / k
       const rw = tw + 10 / k
       const rh = 16 / k
-      const ry = outward > 0 ? this.wallT() / 2 + 6 / k : -this.wallT() / 2 - 6 / k - rh
+      /** @type {[number, number][]} */
+      const doors = []
+      for (const o of this.openings()) {
+        const G = o.kind === 'door' && o.wall === w.id ? this.geom(o) : null
+        if (G && G.n.x * side.x + G.n.y * side.y > 0) doors.push([G.t0, G.t1])
+      }
+      const t = freeSpot(L / 2, rw / 2 + 6 / k, doors, L) / (L || 1)
+      g.translate(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+      g.rotate(ang)
+      g.fillStyle = C.pill
+      g.strokeStyle = C.pillLine
+      g.lineWidth = 1 / k
+      const ry = sgn > 0 ? this.wallT() / 2 + 6 / k : -this.wallT() / 2 - 6 / k - rh
       g.beginPath()
       g.roundRect(rx, ry, rw, rh, 4 / k)
       g.fill()
@@ -1473,7 +1495,7 @@ export class Editor {
       g.fillText(txt, 0, 0)
       g.restore()
     }
-    this.p.plan.walls.forEach((w) => label(w.a, w.b, C.pillText))
+    this.p.plan.walls.forEach((w) => label(w, C.pillText))
     // wall tool: in-progress segment, or the snapped point under a hovering mouse / pen
     const last = this.drawPts.at(-1)
     if (this.tool === 'wall' && this.cur && (last || !this.ptrs.size)) {
@@ -1485,7 +1507,7 @@ export class Editor {
         g.moveTo(last.x, last.y)
         g.lineTo(s.x, s.y)
         g.stroke()
-        label(last, s, C.acc)
+        label({ a: last, b: s }, C.acc)
       }
       g.fillStyle = C.acc
       g.beginPath()

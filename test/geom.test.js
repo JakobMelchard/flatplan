@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dist, projT, segDist, sat, toLocal, openingGeom, hits } from '../src/geom.js'
+import { dist, projT, segDist, sat, toLocal, openingGeom, hits, freeSpot } from '../src/geom.js'
 import { blank, migrate } from '../src/model.js'
 
 /** @typedef {import('../src/model.js').Opening} Opening */
@@ -110,4 +110,11 @@ test('sat: a wall segment against a selection box', () => {
     ),
     true,
   ) // clips a corner
+})
+
+test('freeSpot: keeps a label clear of door gaps, nearest to the middle', () => {
+  assert.equal(freeSpot(360, 30, [], 720), 360)
+  assert.equal(freeSpot(360, 30, [[332.5, 427.5]], 720), 302.5)
+  assert.equal(freeSpot(360, 30, [[300, 400]], 720), 430)
+  assert.equal(freeSpot(50, 30, [[0, 100]], 100), 50)
 })

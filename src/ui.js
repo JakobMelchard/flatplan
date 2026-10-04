@@ -127,10 +127,12 @@ const file = (label, accept, onFile, opts = {}) =>
 /** @param {Asset} a */
 const thumb = (a) => {
   const k = 34 / Math.max(a.w, a.d)
-  const bg = a.img ? `background-image:url(${a.img})` : `background:${a.color}`
-  const i = h('i', {
-    style: `width:${Math.max(4, a.w * k)}px;height:${Math.max(4, a.d * k)}px;${bg}`,
-  })
+  const i = h('i')
+  // one property at a time: a value from an imported file cannot add declarations of its own
+  i.style.width = `${Math.max(4, a.w * k)}px`
+  i.style.height = `${Math.max(4, a.d * k)}px`
+  if (a.img) i.style.backgroundImage = `url("${a.img}")`
+  else i.style.background = a.color
   return h('div', { className: 'th' }, i)
 }
 /** Default colours for new furniture: org palette tokens, with fallbacks (a colour input needs hex). */
@@ -160,9 +162,10 @@ const narrow = matchMedia('(max-width: 1200px)')
  * @param {{ top: HTMLElement, left: HTMLElement, right: HTMLElement, main: HTMLElement }} el
  * @param {Editor} ed
  * @param {(p: Project) => void} setProject
+ * @param {string} [warn] shown in the toast at start, with a reload button
  * @returns {() => void} refresh everything from the project
  */
-export function buildUI({ top, left, right, main }, ed, setProject) {
+export function buildUI({ top, left, right, main }, ed, setProject, warn) {
   const p = () => ed.p
   const body = document.body
 
@@ -404,6 +407,12 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
           'Redone',
           btn('Undo', () => ed.undo(), { icon: I.undo, cls: 'ghost' }),
         )
+  if (warn)
+    notify(
+      warn,
+      btn('Reload', () => location.reload(), { icon: I.reset, cls: 'ghost' }),
+      0,
+    )
 
   // An app opened from the home screen resumes the old page instead of reloading, so check the
   // served commit when it comes back to the foreground and offer a reload after a deploy.
@@ -549,7 +558,9 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
     'Top-view image',
     'image/*',
     async (fl) => {
-      f.img = await shrinkImage(await readFile(fl, 'dataURL'), 600)
+      const src = await shrinkImage(await readFile(fl, 'dataURL'), 600).catch(() => '')
+      if (!src) return alert('Not an image file.')
+      f.img = src
       syncImg()
     },
     { icon: I.image },
@@ -905,13 +916,9 @@ export function buildUI({ top, left, right, main }, ed, setProject) {
         im ? 'Replace' : 'Upload plan',
         'image/*',
         async (fl) => {
-          p().plan.image = {
-            src: await shrinkImage(await readFile(fl, 'dataURL')),
-            x: 0,
-            y: 0,
-            cmPerPx: 1,
-            opacity: 0.6,
-          }
+          const src = await shrinkImage(await readFile(fl, 'dataURL')).catch(() => '')
+          if (!src) return alert('Not an image file.')
+          p().plan.image = { src, x: 0, y: 0, cmPerPx: 1, opacity: 0.6 }
           ed.changed()
           ed.fit()
           ed.setTool('scale')

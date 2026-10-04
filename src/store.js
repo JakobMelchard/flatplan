@@ -10,14 +10,23 @@ const STORE = 'kv'
 const KEY = 'project'
 const LEGACY = 'flatplan' // localStorage key of the pre-IndexedDB versions
 
-/** @returns {Promise<IDBDatabase>} */
+/** @type {Promise<IDBDatabase> | undefined} */
+let conn
+// Set when the stored project could not be read. save() refuses from then on, so the blank
+// project the app starts with is never written over the stored one.
+let unread = ''
+
+/** @returns {Promise<IDBDatabase>} one connection for the page, reopened after it closes or fails */
 const open = () =>
-  new Promise((res, rej) => {
+  (conn ??= new Promise((res, rej) => {
     const r = indexedDB.open(DB, 1)
     r.onupgradeneeded = () => r.result.createObjectStore(STORE)
-    r.onsuccess = () => res(r.result)
-    r.onerror = () => rej(r.error)
-  })
+    r.onsuccess = () => {
+      r.result.onclose = () => (conn = undefined)
+      res(r.result)
+    }
+    r.onerror = () => ((conn = undefined), rej(r.error))
+  }))
 
 /**
  * @param {IDBTransactionMode} mode
@@ -30,16 +39,27 @@ const tx = async (mode, fn) => {
     const r = fn(db.transaction(STORE, mode).objectStore(STORE))
     r.onsuccess = () => res(r.result)
     r.onerror = () => rej(r.error)
+  }).catch((e) => {
+    // the connection may be dead (iOS drops them in the background): open a new one next time
+    db.close()
+    conn = undefined
+    throw e
   })
 }
 
-/** @returns {Promise<Project>} */
+/**
+ * @returns {Promise<Project>} a blank project when nothing is stored. Rejects when the stored
+ *   project cannot be read or is not a project; save() refuses until the page is reloaded.
+ */
 export const load = async () => {
   navigator.storage?.persist?.().catch(() => {})
   try {
     const p = await tx('readonly', (s) => s.get(KEY))
     if (p) return migrate(p)
-  } catch {}
+  } catch (e) {
+    unread = `Could not read the saved project (${/** @type {Error} */ (e)?.name}). Changes are not saved.`
+    throw new Error(unread, { cause: e })
+  }
   try {
     const s = localStorage.getItem(LEGACY)
     if (s) {
@@ -57,6 +77,7 @@ export const load = async () => {
  * @returns {Promise<string | null>} error message, null on success
  */
 export const save = async (p) => {
+  if (unread) return unread
   try {
     await tx('readwrite', (s) => s.put(structuredClone(p), KEY))
     return null
@@ -105,11 +126,12 @@ export const readFile = (f, as) =>
  * Downscale big images (phone photos of a plan are 12 MP+) before they go into the project.
  * @param {string} src data URL
  * @param {number} [max] longest side in px
- * @returns {Promise<string>}
+ * @returns {Promise<string>} rejects when src is not an image the browser can decode
  */
 export const shrinkImage = (src, max = 2000) =>
-  new Promise((res) => {
+  new Promise((res, rej) => {
     const im = new Image()
+    im.onerror = () => rej(new Error('not an image'))
     im.onload = () => {
       const k = Math.min(1, max / Math.max(im.width, im.height))
       if (k === 1) return res(src)

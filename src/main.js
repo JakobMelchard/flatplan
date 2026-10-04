@@ -1,4 +1,4 @@
-import { migrate } from './model.js'
+import { blank, migrate } from './model.js'
 import { load, save } from './store.js'
 import { Editor } from './editor.js'
 import { buildUI } from './ui.js'
@@ -6,7 +6,12 @@ import { setupFeedback } from './feedback.js'
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id))
 
-const ed = new Editor(/** @type {HTMLCanvasElement} */ ($('c')), await load())
+// a stored project that cannot be read: start blank and say so; the store refuses to save over it
+let unread = ''
+const ed = new Editor(
+  /** @type {HTMLCanvasElement} */ ($('c')),
+  await load().catch((e) => ((unread = e.message), blank())),
+)
 const refresh = buildUI(
   {
     top: $('top'),
@@ -16,9 +21,10 @@ const refresh = buildUI(
   },
   ed,
   (p) => (ed.p = migrate(p)),
+  unread,
 )
 let t = 0
-let warned = false
+let warned = !!unread
 ed.onChange = () => {
   refresh()
   clearTimeout(t)

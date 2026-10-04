@@ -41,10 +41,15 @@ createServer(async (req, res) => {
     if (clientLog) await appendFile(clientLog, body.trimEnd() + '\n').catch(() => {})
     return res.writeHead(204).end()
   }
-  const path = normalize(decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)).replace(
-    /^(\.\.[/\\])+/,
-    '',
-  )
+  let path
+  try {
+    path = normalize(decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)).replace(
+      /^(\.\.[/\\])+/,
+      '',
+    )
+  } catch {
+    return res.writeHead(400).end() // malformed percent-encoding
+  }
   const file = join(root, path.endsWith('/') ? `${path}index.html` : path)
   if (
     !file.startsWith(root) ||

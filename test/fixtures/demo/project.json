@@ -1,0 +1,62 @@
+{
+  "plan": {
+    "walls": [
+      { "id": "w1", "a": { "x": 0, "y": 0 }, "b": { "x": 720, "y": 0 } },
+      { "id": "w2", "a": { "x": 720, "y": 0 }, "b": { "x": 720, "y": 480 } },
+      { "id": "w3", "a": { "x": 720, "y": 480 }, "b": { "x": 0, "y": 480 } },
+      { "id": "w4", "a": { "x": 0, "y": 480 }, "b": { "x": 0, "y": 0 } },
+      { "id": "w5", "a": { "x": 440, "y": 0 }, "b": { "x": 440, "y": 480 } }
+    ],
+    "openings": [
+      { "id": "o1", "wall": "w1", "t": 200, "w": 160, "kind": "window", "hinge": 0, "swing": 1 },
+      { "id": "o2", "wall": "w1", "t": 580, "w": 120, "kind": "window", "hinge": 0, "swing": 1 },
+      { "id": "o3", "wall": "w5", "t": 390, "w": 90, "kind": "door", "hinge": 1, "swing": 1 },
+      { "id": "o4", "wall": "w3", "t": 380, "w": 95, "kind": "door", "hinge": 0, "swing": -1 },
+      { "id": "o5", "wall": "w4", "t": 240, "w": 140, "kind": "window", "hinge": 0, "swing": 1 }
+    ],
+    "wallT": 12
+  },
+  "assets": [
+    { "id": "sofa", "name": "Sofa", "w": 220, "d": 95, "h": 80, "color": "#6272a4" },
+    { "id": "table", "name": "Dining table", "w": 160, "d": 90, "h": 75, "color": "#ffb86c" },
+    { "id": "chair", "name": "Chair", "w": 45, "d": 50, "h": 90, "color": "#f1fa8c" },
+    { "id": "tv", "name": "TV board", "w": 180, "d": 40, "h": 50, "color": "#44475a" },
+    { "id": "rug", "name": "Rug", "w": 200, "d": 140, "h": 1, "color": "#bd93f9" },
+    { "id": "bed", "name": "Bed 160", "w": 160, "d": 200, "h": 45, "color": "#8be9fd" },
+    { "id": "ward", "name": "Wardrobe", "w": 200, "d": 60, "h": 220, "color": "#50fa7b" },
+    { "id": "desk", "name": "Desk", "w": 140, "d": 70, "h": 75, "color": "#ff79c6" },
+    { "id": "night", "name": "Nightstand", "w": 45, "d": 40, "h": 50, "color": "#ffb86c" }
+  ],
+  "layouts": [
+    {
+      "id": "L1",
+      "name": "Current",
+      "items": [
+        { "id": "i1", "asset": "rug", "x": 190, "y": 180, "rot": 0 },
+        { "id": "i2", "asset": "sofa", "x": 190, "y": 330, "rot": 180 },
+        { "id": "i3", "asset": "tv", "x": 190, "y": 40, "rot": 0 },
+        { "id": "i4", "asset": "table", "x": 360, "y": 130, "rot": 90 },
+        { "id": "i5", "asset": "chair", "x": 290, "y": 90, "rot": 90 },
+        { "id": "i6", "asset": "chair", "x": 290, "y": 170, "rot": 90 },
+        { "id": "i7", "asset": "chair", "x": 360, "y": 238, "rot": 0 },
+        { "id": "i9", "asset": "bed", "x": 570, "y": 130, "rot": 0 },
+        { "id": "i10", "asset": "night", "x": 471, "y": 45, "rot": 0 },
+        { "id": "i11", "asset": "night", "x": 672, "y": 45, "rot": 0 },
+        { "id": "i12", "asset": "ward", "x": 684, "y": 330, "rot": 90 },
+        { "id": "i13", "asset": "desk", "x": 580, "y": 438, "rot": 180 }
+      ]
+    },
+    {
+      "id": "L2",
+      "name": "Alternative",
+      "items": [
+        { "id": "j1", "asset": "sofa", "x": 60, "y": 240, "rot": 90 },
+        { "id": "j2", "asset": "table", "x": 250, "y": 240, "rot": 0 },
+        { "id": "j3", "asset": "bed", "x": 580, "y": 300, "rot": 180 },
+        { "id": "j4", "asset": "ward", "x": 470, "y": 130, "rot": 90 },
+        { "id": "j5", "asset": "desk", "x": 600, "y": 50, "rot": 0 }
+      ]
+    }
+  ],
+  "current": "L1"
+}

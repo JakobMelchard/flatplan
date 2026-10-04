@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0b0d10" />
+<meta name="theme-color" content="#0b0d10" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="flatplan" />
@@ -11,6 +12,15 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="stylesheet" href="tokens.css" />
+<script>
+  // tokens.css defaults to dark: follow the system light / dark setting unless data-theme is set here
+  if (!document.documentElement.dataset.theme) {
+    const mq = matchMedia('(prefers-color-scheme: light)')
+    const set = () => (document.documentElement.dataset.theme = mq.matches ? 'light' : 'dark')
+    set()
+    mq.addEventListener('change', set)
+  }
+</script>
 <title>flatplan</title>
 <style>
   /* app aliases over the org tokens (tokens.css: --bg --card --fg --muted --accent --line ...) */

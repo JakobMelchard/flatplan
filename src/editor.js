@@ -1,5 +1,16 @@
 import { layout, asset, uid } from './model.js'
-import { dist, projT, segDist, lum, toLocal, openingGeom, hits, footprint, sat } from './geom.js'
+import {
+  dist,
+  projT,
+  segDist,
+  lum,
+  toLocal,
+  openingGeom,
+  hits,
+  footprint,
+  sat,
+  freeSpot,
+} from './geom.js'
 import { History } from './history.js'
 
 /** @typedef {import('./model.js').Project} Project */
@@ -82,6 +93,23 @@ const fitText = (g, s, max) => {
     if (g.measureText(t).width <= max) return t
   }
   return ''
+}
+/**
+ * Largest font size from `px` down to `min` (0.5 steps) at which `s` fits `max`; leaves that font set.
+ * @param {CanvasRenderingContext2D} g
+ * @param {string} s text
+ * @param {number} max width in the context's units
+ * @param {number} px start size
+ * @param {number} min floor size
+ * @param {(z: number) => string} font CSS font for size z
+ * @returns {number} the size, or 0 when `s` does not fit even at `min`
+ */
+const fitSize = (g, s, max, px, min, font) => {
+  for (let z = px; z >= min; z -= 0.5) {
+    g.font = font(z)
+    if (g.measureText(s).width <= max) return z
+  }
+  return 0
 }
 
 export class Editor {
@@ -1260,29 +1288,40 @@ export class Editor {
       y: wallPts.reduce((s, q) => s + q.y, 0) / (wallPts.length || 1),
     }
     /**
-     * Length pill beside a wall, on the side away from the plan's centre.
-     * @param {Pt} a
-     * @param {Pt} b
+     * Length pill beside a wall, on the side away from the plan's centre, slid along the wall off
+     * any door that swings to that side.
+     * @param {import('./model.js').Wall} w
      * @param {string} col
      */
-    const label = (a, b, col) => {
-      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    const label = (w, col) => {
+      const { a, b } = w
+      const L = dist(a, b)
       let ang = Math.atan2(b.y - a.y, b.x - a.x)
       if (Math.abs(ang) > Math.PI / 2) ang += Math.PI
-      const outward = (m.x - cen.x) * -Math.sin(ang) + (m.y - cen.y) * Math.cos(ang)
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+      const outward = (mid.x - cen.x) * -Math.sin(ang) + (mid.y - cen.y) * Math.cos(ang)
+      const sgn = outward > 0 ? 1 : -1 // the pill's side; a wall through the centre takes the inner one
+      const side = { x: -Math.sin(ang) * sgn, y: Math.cos(ang) * sgn }
+      const txt = `${L.toFixed(0)} cm`
       g.save()
-      g.translate(m.x, m.y)
-      g.rotate(ang)
-      const txt = `${dist(a, b).toFixed(0)} cm`
       g.font = `500 ${11 / k}px ${C.font}`
       const tw = g.measureText(txt).width
-      g.fillStyle = C.pill
-      g.strokeStyle = C.pillLine
-      g.lineWidth = 1 / k
       const rx = -tw / 2 - 5 / k
       const rw = tw + 10 / k
       const rh = 16 / k
-      const ry = outward > 0 ? this.wallT() / 2 + 6 / k : -this.wallT() / 2 - 6 / k - rh
+      /** @type {[number, number][]} */
+      const doors = []
+      for (const o of this.openings()) {
+        const G = o.kind === 'door' && o.wall === w.id ? this.geom(o) : null
+        if (G && G.n.x * side.x + G.n.y * side.y > 0) doors.push([G.t0, G.t1])
+      }
+      const t = freeSpot(L / 2, rw / 2 + 6 / k, doors, L) / (L || 1)
+      g.translate(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+      g.rotate(ang)
+      g.fillStyle = C.pill
+      g.strokeStyle = C.pillLine
+      g.lineWidth = 1 / k
+      const ry = sgn > 0 ? this.wallT() / 2 + 6 / k : -this.wallT() / 2 - 6 / k - rh
       g.beginPath()
       g.roundRect(rx, ry, rw, rh, 4 / k)
       g.fill()
@@ -1354,6 +1393,8 @@ export class Editor {
     }
     // items
     const single = !!this.selected()
+    /** @type {{ m: DOMMatrix, a: import('./model.js').Asset, dark: boolean }[]} */
+    const over = []
     for (const it of layout(this.p).items) {
       const a = asset(this.p, it.asset)
       if (!a) continue
@@ -1409,22 +1450,52 @@ export class Editor {
       if (a.w * k > 44 && a.d * k > 18) {
         const dark = a.img || lum(a.color) > 0.55
         g.fillStyle = dark ? 'rgba(0,0,0,.75)' : 'rgba(255,255,255,.9)'
-        g.font = `500 ${12 / k}px ${C.font}`
         g.textAlign = 'center'
         g.textBaseline = 'middle'
         // keep the label upright: past 90 degrees it would read upside down
         if (it.rot > 90 && it.rot <= 270) g.rotate(Math.PI)
         const room = a.w - 8 / k
-        g.fillText(fitText(g, a.name, room), 0, a.d * k > 40 ? -7 / k : 0)
-        if (a.d * k > 40) {
-          g.font = `${10.5 / k}px ${C.font}`
+        const nf = (/** @type {number} */ z) => `500 ${z / k}px ${C.font}`
+        const df = (/** @type {number} */ z) => `${z / k}px ${C.font}`
+        const dims = `${a.w} × ${a.d}`
+        // shrink the name to a floor before giving up on it; drop the size line rather than cut it
+        const nz = fitSize(g, a.name, room, 12, 9, nf)
+        const dz = nz && a.d * k > 40 ? fitSize(g, dims, room, 10.5, 8.5, df) : 0
+        if (nz) {
+          g.font = nf(nz)
+          g.fillText(a.name, 0, dz ? -7 / k : 0)
+        } else over.push({ m: g.getTransform(), a, dark: !!dark })
+        if (dz) {
+          g.font = df(dz)
           g.fillStyle = dark ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.6)'
-          g.fillText(fitText(g, `${a.w} × ${a.d}`, room), 0, 8 / k)
+          g.fillText(dims, 0, 8 / k)
         }
       }
       g.restore()
     }
-    this.p.plan.walls.forEach((w) => label(w.a, w.b, C.pillText))
+    // names too wide for their item even at the floor size: a pill in the item colour, centred on
+    // it and allowed past its outline, drawn after all items so a neighbour cannot cover it
+    for (const { m, a, dark } of over) {
+      g.save()
+      g.setTransform(m)
+      g.font = `500 ${9 / k}px ${C.font}`
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      const txt = fitText(g, a.name, 140 / k)
+      const pw = g.measureText(txt).width + 8 / k
+      const ph = 14 / k
+      g.fillStyle = a.img ? C.pill : a.color
+      g.strokeStyle = C.outline
+      g.lineWidth = 1 / k
+      g.beginPath()
+      g.roundRect(-pw / 2, -ph / 2, pw, ph, 3 / k)
+      g.fill()
+      g.stroke()
+      g.fillStyle = a.img ? C.pillText : dark ? 'rgba(0,0,0,.75)' : 'rgba(255,255,255,.9)'
+      g.fillText(txt, 0, 0)
+      g.restore()
+    }
+    this.p.plan.walls.forEach((w) => label(w, C.pillText))
     // wall tool: in-progress segment, or the snapped point under a hovering mouse / pen
     const last = this.drawPts.at(-1)
     if (this.tool === 'wall' && this.cur && (last || !this.ptrs.size)) {
@@ -1436,7 +1507,7 @@ export class Editor {
         g.moveTo(last.x, last.y)
         g.lineTo(s.x, s.y)
         g.stroke()
-        label(last, s, C.acc)
+        label({ a: last, b: s }, C.acc)
       }
       g.fillStyle = C.acc
       g.beginPath()

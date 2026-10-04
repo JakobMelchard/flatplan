@@ -103,6 +103,24 @@ export const openingGeom = (o, w) => {
 }
 
 /**
+ * Centre for a span of half-width h on a segment of length L: nearest to `mid` that stays on the
+ * segment and clear of every blocked [t0, t1] interval; `mid` when there is no such spot.
+ * @param {number} mid preferred centre
+ * @param {number} h half-width of the span
+ * @param {[number, number][]} blocked intervals to keep clear of
+ * @param {number} L segment length
+ * @returns {number} the centre
+ */
+export const freeSpot = (mid, h, blocked, L) => {
+  const ok = (/** @type {number} */ t) =>
+    t - h >= 0 && t + h <= L && blocked.every(([a, b]) => t + h <= a || t - h >= b)
+  const near = [mid, ...blocked.flatMap(([a, b]) => [a - h, b + h])]
+    .filter(ok)
+    .sort((p, q) => Math.abs(p - mid) - Math.abs(q - mid))
+  return near[0] ?? mid
+}
+
+/**
  * Corners of an asset's footprint centred at (x, y), rotated by rot degrees, shrunk by e.
  * @param {Asset} a
  * @param {number} x

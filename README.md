@@ -8,6 +8,8 @@
 step. All lengths cm. Installable as a PWA (iPad: Share → Add to Home Screen) and usable with
 touch, Apple Pencil, mouse or keyboard.
 
+<img alt="flatplan editor: two-room floor plan with walls, doors, windows and furniture" src="docs/screenshots/plan.png" width="720">
+
 - App: <https://docs.melchard.org/flatplan/app/>
 - Docs: <https://docs.melchard.org/flatplan/> (gestures, floor plan, furniture, layouts,
   shortcuts, development, hosting); `?` in the app shows the shortcuts.

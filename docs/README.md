@@ -8,7 +8,7 @@ and door swings. All lengths in cm.
 
 It is a static web app: vanilla JS with JSDoc types and a Canvas renderer, no build step, no
 runtime dependencies. Installed to the home screen it works offline; everything you draw stays on
-your device unless you export it.
+your device unless you export it. It follows the system light or dark appearance.
 
 ## Where to start
 

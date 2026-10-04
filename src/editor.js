@@ -83,6 +83,23 @@ const fitText = (g, s, max) => {
   }
   return ''
 }
+/**
+ * Largest font size from `px` down to `min` (0.5 steps) at which `s` fits `max`; leaves that font set.
+ * @param {CanvasRenderingContext2D} g
+ * @param {string} s text
+ * @param {number} max width in the context's units
+ * @param {number} px start size
+ * @param {number} min floor size
+ * @param {(z: number) => string} font CSS font for size z
+ * @returns {number} the size, or 0 when `s` does not fit even at `min`
+ */
+const fitSize = (g, s, max, px, min, font) => {
+  for (let z = px; z >= min; z -= 0.5) {
+    g.font = font(z)
+    if (g.measureText(s).width <= max) return z
+  }
+  return 0
+}
 
 export class Editor {
   ox = 60
@@ -1354,6 +1371,8 @@ export class Editor {
     }
     // items
     const single = !!this.selected()
+    /** @type {{ m: DOMMatrix, a: import('./model.js').Asset, dark: boolean }[]} */
+    const over = []
     for (const it of layout(this.p).items) {
       const a = asset(this.p, it.asset)
       if (!a) continue
@@ -1409,19 +1428,49 @@ export class Editor {
       if (a.w * k > 44 && a.d * k > 18) {
         const dark = a.img || lum(a.color) > 0.55
         g.fillStyle = dark ? 'rgba(0,0,0,.75)' : 'rgba(255,255,255,.9)'
-        g.font = `500 ${12 / k}px ${C.font}`
         g.textAlign = 'center'
         g.textBaseline = 'middle'
         // keep the label upright: past 90 degrees it would read upside down
         if (it.rot > 90 && it.rot <= 270) g.rotate(Math.PI)
         const room = a.w - 8 / k
-        g.fillText(fitText(g, a.name, room), 0, a.d * k > 40 ? -7 / k : 0)
-        if (a.d * k > 40) {
-          g.font = `${10.5 / k}px ${C.font}`
+        const nf = (/** @type {number} */ z) => `500 ${z / k}px ${C.font}`
+        const df = (/** @type {number} */ z) => `${z / k}px ${C.font}`
+        const dims = `${a.w} × ${a.d}`
+        // shrink the name to a floor before giving up on it; drop the size line rather than cut it
+        const nz = fitSize(g, a.name, room, 12, 9, nf)
+        const dz = nz && a.d * k > 40 ? fitSize(g, dims, room, 10.5, 8.5, df) : 0
+        if (nz) {
+          g.font = nf(nz)
+          g.fillText(a.name, 0, dz ? -7 / k : 0)
+        } else over.push({ m: g.getTransform(), a, dark: !!dark })
+        if (dz) {
+          g.font = df(dz)
           g.fillStyle = dark ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.6)'
-          g.fillText(fitText(g, `${a.w} × ${a.d}`, room), 0, 8 / k)
+          g.fillText(dims, 0, 8 / k)
         }
       }
+      g.restore()
+    }
+    // names too wide for their item even at the floor size: a pill in the item colour, centred on
+    // it and allowed past its outline, drawn after all items so a neighbour cannot cover it
+    for (const { m, a, dark } of over) {
+      g.save()
+      g.setTransform(m)
+      g.font = `500 ${9 / k}px ${C.font}`
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      const txt = fitText(g, a.name, 140 / k)
+      const pw = g.measureText(txt).width + 8 / k
+      const ph = 14 / k
+      g.fillStyle = a.img ? C.pill : a.color
+      g.strokeStyle = C.outline
+      g.lineWidth = 1 / k
+      g.beginPath()
+      g.roundRect(-pw / 2, -ph / 2, pw, ph, 3 / k)
+      g.fill()
+      g.stroke()
+      g.fillStyle = a.img ? C.pillText : dark ? 'rgba(0,0,0,.75)' : 'rgba(255,255,255,.9)'
+      g.fillText(txt, 0, 0)
       g.restore()
     }
     this.p.plan.walls.forEach((w) => label(w.a, w.b, C.pillText))

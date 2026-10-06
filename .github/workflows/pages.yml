@@ -1,6 +1,8 @@
 name: pages
 
-on: { push: { branches: [main] } }
+# Deploys only after ci passed on main (unit tests, e2e, lint), from the commit ci checked.
+on:
+  workflow_run: { workflows: [ci], types: [completed], branches: [main] }
 
 permissions:
   contents: read
@@ -11,17 +13,36 @@ concurrency: { group: pages, cancel-in-progress: true }
 
 jobs:
   deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { ref: '${{ github.event.workflow_run.head_sha }}' }
       - name: Build the docs at the site root # HonKit resolves a relative output path against the book root
-        run: npx --yes honkit build docs "$PWD/site"
+        run: npx --yes honkit@6.2.2 build docs "$PWD/site"
       - name: Stage the app under /app with a version stamp for the in-app update check
         run: |
           mkdir site/app
           cp -r index.html tokens.css sw.js manifest.webmanifest icons src site/app
           printf '{"version":"%s","debug":false}\n' "$(git log -1 --format='%h %s')" > site/app/version
+      - name: Stamp the service worker with the commit and every shipped file
+        # a new CACHE changes sw.js, so browsers install it and precache this deploy's files
+        working-directory: site/app
+        run: |
+          SHA=$(git rev-parse --short=12 HEAD) node -e '
+            const fs = require("node:fs")
+            const files = fs.readdirSync(".", { recursive: true }).filter((f) => fs.statSync(f).isFile())
+            const shell = ["./", ...files.filter((f) => f !== "sw.js" && f !== "version").sort()]
+            let n = 0
+            const out = fs
+              .readFileSync("sw.js", "utf8")
+              .replace(/^const CACHE = .*$/m, () => (n++, "const CACHE = " + JSON.stringify("flatplan-" + process.env.SHA)))
+              .replace(/^const SHELL = \[[^\]]*\]/m, () => (n++, "const SHELL = " + JSON.stringify(shell)))
+            if (n !== 2) throw new Error("CACHE or SHELL not found in sw.js")
+            fs.writeFileSync("sw.js", out)
+          '
+          head -5 sw.js
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with: { path: site }
       - id: deploy

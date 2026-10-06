@@ -10,6 +10,7 @@ BIND=0.0.0.0 npm start # reachable from the iPad over LAN or tailnet
 npm run check          # tsc over the JSDoc types
 npm run lint
 npm test               # node --test, pure geometry
+npm run e2e            # browser flow: place, reload, export, import (Playwright Chromium)
 ```
 
 The dev server reads `BIND`, not `HOST`. The service worker only registers on HTTPS or
@@ -33,7 +34,7 @@ localhost, so test install and offline behaviour against the deployed site or a 
 | `serve.js`                                | Dev server; also `/version` and the `/log` sink                      |
 | `docs/`                                   | This site (HonKit)                                                   |
 
-When the file list changes, bump `CACHE` in `sw.js` and add new files to `SHELL`.
+The deploy sets `CACHE` in `sw.js` to the commit and `SHELL` to every shipped file.
 
 ## Model
 

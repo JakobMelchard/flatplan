@@ -70,6 +70,8 @@ test('place an item, reload, export, reset and import', async () => {
   page.on('pageerror', (e) => errors.push(e.message))
   // CSP violations and failed loads end up here
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  // the app asks in its own dialog, never with alert / confirm / prompt
+  page.on('dialog', (d) => (errors.push(`native dialog: ${d.message()}`), d.dismiss()))
   await page.goto(`http://127.0.0.1:${PORT}/`)
 
   await page.click('#left .ph button')
@@ -77,6 +79,13 @@ test('place an item, reload, export, reset and import', async () => {
   await page.click('dialog[open] button[type=submit]')
   await page.click('#left .card')
   await until(page, (p) => p.assets[0]?.name === 'Sofa' && items(p).length === 1)
+
+  // keyboard shortcut on the placed (selected) item, and a rename through the app's dialog
+  await page.keyboard.press('r')
+  await page.click('.tab.on')
+  await page.fill('#ask input', 'Living room')
+  await page.press('#ask input', 'Enter')
+  await until(page, (p) => items(p)[0].rot === 90 && p.layouts[0].name === 'Living room')
 
   await page.reload()
   await page.locator('#left .card', { hasText: 'Sofa' }).waitFor()
@@ -87,8 +96,8 @@ test('place an item, reload, export, reset and import', async () => {
   assert.equal(out.assets[0].name, 'Sofa')
   assert.equal(items(out).length, 1)
 
-  page.once('dialog', (d) => d.accept())
   await page.click('[title="Reset project"]')
+  await page.click('#ask button[value=ok]')
   await until(page, (p) => p.assets.length === 0 && items(p).length === 0)
 
   await page.setInputFiles('label:has-text("Import") input[type=file]', file)
@@ -139,8 +148,8 @@ test('after a failed read the warning stays until Reset, which saves again', asy
   await page.reload()
   const toast = page.locator('#toast')
   await toast.filter({ hasText: 'Could not read the saved project' }).waitFor()
-  page.once('dialog', (d) => d.accept())
   await page.click('[title="Reset project"]')
+  await page.click('#ask button[value=ok]')
   await toast.waitFor({ state: 'hidden' })
   await until(page, (p) => Array.isArray(p.layouts))
   await ctx.close()

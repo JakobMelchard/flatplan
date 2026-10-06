@@ -74,6 +74,7 @@ test('an edit is autosaved after the debounce', async () => {
 
 test('after a read error main.js hands the warning to the UI and nothing is saved', async () => {
   seen.readError = Object.assign(new Error('boom'), { name: 'UnknownError' })
+  const puts = seen.puts.length
   await start()
   // buildUI shows its fourth argument in the toast
   assert.match(String(seen.ui[3]), /Could not read the saved project \(UnknownError\)/)
@@ -83,6 +84,6 @@ test('after a read error main.js hands the warning to the UI and nothing is save
   doc.visibilityState = 'hidden'
   seen.on.visibilitychange()
   await sleep(10)
-  assert.equal(seen.puts.length, 1) // still only the save of the first test
+  assert.equal(seen.puts.length, puts)
   assert.deepEqual(seen.alerts, [])
 })

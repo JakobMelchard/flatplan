@@ -14,10 +14,11 @@ npm start          # static dev server, http://127.0.0.1:5173 (BIND=0.0.0.0 for 
 npm run check      # tsc over JSDoc types
 npm run lint
 npm test           # node --test, pure geometry
+npm run e2e        # browser flow (Playwright Chromium: npx playwright-core install chromium)
 npm run screenshots # docs/screenshots/plan.png from test/fixtures/demo, needs Chromium
 ```
 
-CI runs check, lint and test.
+CI runs check, lint, test and e2e; the Pages deploy waits for it.
 
 ## Layout
 
@@ -31,8 +32,8 @@ CI runs check, lint and test.
 - `src/editor.js` canvas view, pointer input, tools, render
 - `src/ui.js` header, panels, action bar, dialogs
 - `src/main.js` wiring
-- `sw.js`, `manifest.webmanifest`, `icons/` PWA shell; bump `CACHE` in `sw.js`
-  and add new files to `SHELL` when the file list changes
+- `sw.js`, `manifest.webmanifest`, `icons/` PWA shell; the deploy sets `CACHE` to the commit
+  and `SHELL` to every shipped file, so neither is kept by hand
 
 User-facing behaviour and shortcuts are documented in `docs/` (HonKit, published under
 `/docs/` next to the app) and in the in-app `?` dialog; keep both in step. Every

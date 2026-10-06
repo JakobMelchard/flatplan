@@ -81,8 +81,8 @@ test('offline: a cached asset is served from the cache', async () => {
 
 test('online: a shell file is cached, and the cache write is held by waitUntil', async () => {
   const { get, cache } = boot(true)
-  assert.equal((await get('src/main.js')).waits, 1)
-  assert.equal(cache.get(`${base}src/main.js`), `network ${base}src/main.js`)
+  assert.equal((await get('index.html')).waits, 1)
+  assert.equal(cache.get(`${base}index.html`), `network ${base}index.html`)
 })
 
 test('online: a request outside the shell list is not cached', async () => {

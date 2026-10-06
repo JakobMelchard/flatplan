@@ -20,7 +20,8 @@ touch, Apple Pencil, mouse or keyboard.
 npm ci && npm start               # http://127.0.0.1:5173
 BIND=0.0.0.0 npm start            # reachable from the iPad over LAN / tailnet
 brew install prek && prek install # git hooks (.pre-commit-config.yaml), once per clone
-npm run check && npm run lint && npm test
+npx playwright-core install chromium # browser for npm run e2e, once
+npm run check && npm run lint && npm test && npm run e2e
 ```
 
 The service worker (offline use, install) only registers on HTTPS or localhost.
@@ -35,6 +36,6 @@ The service worker (offline use, install) only registers on HTTPS or localhost.
 
 ## Hosting
 
-GitHub Pages. Push to `main` → `.github/workflows/pages.yml` stages the app shell, writes a
+GitHub Pages. Push to `main`, CI passes → `.github/workflows/pages.yml` stages the app shell, writes a
 `version` file for the in-app update check, builds `docs/` with HonKit to the site root, stages the app under `app/` and deploys.
 Details in [docs/hosting.md](docs/hosting.md).

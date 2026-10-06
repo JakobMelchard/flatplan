@@ -7,13 +7,15 @@ on: { push: { branches: [main] }, pull_request: {} }
 
 jobs:
   ci:
-    uses: JakobMelchard/.github/.github/workflows/node.yml@main
+    uses: JakobMelchard/.github/.github/workflows/node.yml@bfaa9063ee9c867b43abdad960504803ac847aa0 # v1.3.0
     with:
       check-cmd: npm run check && npm run format:check
       test-cmd: npm test
+      e2e-cmd: npm run e2e
+      browsers: true
 
   hooks:
-    uses: JakobMelchard/.github/.github/workflows/hooks.yml@main
+    uses: JakobMelchard/.github/.github/workflows/hooks.yml@bfaa9063ee9c867b43abdad960504803ac847aa0 # v1.3.0
     with:
       # need node_modules; the node job runs eslint and prettier --check
       skip: eslint,prettier

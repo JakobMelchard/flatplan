@@ -1,31 +1,20 @@
 // Offline support: network first so a deploy shows up on the next load, cache as fallback.
 /** @type {any} ServiceWorkerGlobalScope; the webworker lib clashes with dom in one tsconfig */
 const sw = self
-const CACHE = 'flatplan-v8'
-const SHELL = [
-  './',
-  'index.html',
-  'tokens.css',
-  'manifest.webmanifest',
-  'icons/icon.svg',
-  'icons/icon-192.png',
-  'icons/icon-512.png',
-  'icons/apple-touch-icon.png',
-  'src/main.js',
-  'src/model.js',
-  'src/store.js',
-  'src/geom.js',
-  'src/history.js',
-  'src/debug.js',
-  'src/editor.js',
-  'src/ui.js',
-  'src/feedback.js',
-]
+// The deploy (.github/workflows/pages.yml) replaces both: CACHE with the commit, SHELL with every
+// shipped file. These values only serve the dev server.
+const CACHE = 'flatplan-dev'
+const SHELL = ['./', 'index.html']
 // only these are written to the cache at runtime
 const shellUrls = new Set(SHELL.map((p) => new URL(p, location.href).href))
 
 self.addEventListener('install', (/** @type {any} */ e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)))
+  e.waitUntil(
+    caches
+      .open(CACHE)
+      // past the HTTP cache: Pages serves with max-age, which would precache the previous deploy
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))),
+  )
   sw.skipWaiting()
 })
 

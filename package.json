@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node --test \"test/*.test.js\"",
+    "e2e": "node --test \"test/e2e/*.test.js\"",
     "screenshots": "node scripts/screenshots.js"
   },
   "devDependencies": {

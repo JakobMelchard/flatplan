@@ -20,6 +20,7 @@ touch, Apple Pencil, mouse or keyboard.
 npm ci && npm start               # http://127.0.0.1:5173
 BIND=0.0.0.0 npm start            # reachable from the iPad over LAN / tailnet
 brew install prek && prek install # git hooks (.pre-commit-config.yaml), once per clone
+npx playwright-core install chromium # browser for npm run e2e, once
 npm run check && npm run lint && npm test && npm run e2e
 ```
 

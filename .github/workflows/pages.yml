@@ -19,14 +19,27 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { ref: '${{ github.event.workflow_run.head_sha }}' }
+      - name: Skip unless this commit is still the head of main
+        # an older CI run that finishes after a newer push must not deploy over it
+        id: head
+        env: { SHA: '${{ github.event.workflow_run.head_sha }}' }
+        run: |
+          if [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$SHA" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::main moved past $SHA, not deploying it"
+          fi
       - name: Build the docs at the site root # HonKit resolves a relative output path against the book root
+        if: steps.head.outputs.ok == 'true'
         run: npx --yes honkit@6.2.2 build docs "$PWD/site"
       - name: Stage the app under /app with a version stamp for the in-app update check
+        if: steps.head.outputs.ok == 'true'
         run: |
           mkdir site/app
           cp -r index.html app.css tokens.css sw.js manifest.webmanifest icons src site/app
           printf '{"version":"%s","debug":false}\n' "$(git log -1 --format='%h %s')" > site/app/version
       - name: Stamp the service worker with the commit and every shipped file
+        if: steps.head.outputs.ok == 'true'
         # a new CACHE changes sw.js, so browsers install it and precache this deploy's files
         working-directory: site/app
         run: |
@@ -44,6 +57,8 @@ jobs:
           '
           head -5 sw.js
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        if: steps.head.outputs.ok == 'true'
         with: { path: site }
       - id: deploy
+        if: steps.head.outputs.ok == 'true'
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

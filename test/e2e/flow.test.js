@@ -15,7 +15,12 @@ const srv = spawn('node', ['serve.js'], {
   stdio: ['ignore', 'pipe', 'inherit'],
 })
 await once(srv.stdout, 'data')
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
+const browser = await chromium
+  .launch({ executablePath: process.env.CHROMIUM_PATH || undefined })
+  .catch((e) => {
+    srv.kill()
+    throw e
+  })
 after(async () => {
   await browser.close()
   srv.kill()

@@ -1,7 +1,7 @@
 // Offline support: network first so a deploy shows up on the next load, cache as fallback.
 /** @type {any} ServiceWorkerGlobalScope; the webworker lib clashes with dom in one tsconfig */
 const sw = self
-const CACHE = 'flatplan-v7'
+const CACHE = 'flatplan-v8'
 const SHELL = [
   './',
   'index.html',
@@ -21,6 +21,8 @@ const SHELL = [
   'src/ui.js',
   'src/feedback.js',
 ]
+// only these are written to the cache at runtime
+const shellUrls = new Set(SHELL.map((p) => new URL(p, location.href).href))
 
 self.addEventListener('install', (/** @type {any} */ e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)))
@@ -44,15 +46,18 @@ self.addEventListener('fetch', (/** @type {any} */ e) => {
   e.respondWith(
     fetch(req)
       .then((res) => {
-        if (res.ok) {
+        if (res.ok && shellUrls.has(req.url)) {
           const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put(req, copy))
+          e.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)))
         }
         return res
       })
       .catch(
         async () =>
-          (await caches.match(req)) ?? /** @type {Response} */ (await caches.match('index.html')),
+          (await caches.match(req)) ??
+          // the HTML shell answers page loads only; a script or image must fail, not get HTML
+          (req.mode === 'navigate' ? await caches.match('index.html') : null) ??
+          Response.error(),
       ),
   )
 })

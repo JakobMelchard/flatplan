@@ -10,7 +10,8 @@ BIND=0.0.0.0 npm start # reachable from the iPad over LAN or tailnet
 npm run check          # tsc over the JSDoc types
 npm run lint
 npm test               # node --test, pure geometry
-npm run e2e            # browser flow: place, reload, export, import (Playwright Chromium)
+npx playwright-core install chromium # browser for e2e, once
+npm run e2e            # browser flow: place, reload, export, import
 ```
 
 The dev server reads `BIND`, not `HOST`. The service worker only registers on HTTPS or

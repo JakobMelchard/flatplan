@@ -21,47 +21,15 @@ const h = (tag, props = {}, ...kids) => {
   el.append(...kids)
   return el
 }
-const I = {
-  cursor: '<path d="M5 3l14 8-6 2-3 6z"/>',
-  wall: '<path d="M3 20V4M21 20V4M3 12h18"/>',
-  ruler: '<path d="M3 17L17 3l4 4L7 21zM8 12l2 2M11 9l2 2M14 6l2 2"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
-  minus: '<path d="M5 12h14"/>',
-  fit: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
-  rotl: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/>',
-  rotr: '<path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/>',
-  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5h10"/>',
-  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
-  upload: '<path d="M12 16V4m-5 5l5-5 5 5M4 20h16"/>',
-  download: '<path d="M12 4v12m-5-5l5 5 5-5M4 20h16"/>',
-  door: '<path d="M14 4v16H5V4zM5 20h14M11 12h.01"/><path d="M14 4l5 2v14"/>',
-  window: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h16"/>',
-  flip: '<path d="M12 3v18M8 7l-5 5 5 5M16 7l5 5-5 5"/>',
-  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5M12 17h.01"/>',
-  x: '<path d="M6 6l12 12M18 6L6 18"/>',
-  image:
-    '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/>',
-  reset: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/>',
-  edit: '<path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/>',
-  undo: '<path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/>',
-  redo: '<path d="M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3"/>',
-  multi:
-    '<rect x="3" y="3" width="11" height="11" rx="1" stroke-dasharray="3 2"/><path d="M13 13l7 3-3 1-1 3z"/>',
-  all: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
-  check: '<path d="M5 12l5 5L20 7"/>',
-  left: '<path d="M4 5v14M20 5v14M9 5h6v14H9z"/>',
-  right: '<path d="M4 5h16v14H4zM15 5v14"/>',
-  catalog: '<path d="M4 5h16v14H4zM9 5v14"/>',
-  aL: '<path d="M19 12H5m6-6l-6 6 6 6"/>',
-  aR: '<path d="M5 12h14m-6-6l6 6-6 6"/>',
-  aU: '<path d="M12 19V5m-6 6l6-6 6 6"/>',
-  aD: '<path d="M12 5v14m-6-6l6 6 6-6"/>',
-}
-/** @param {string} d */
-const svg = (d) => {
-  const s = h('span')
-  s.innerHTML = `<svg viewBox="0 0 24 24">${d}</svg>`
-  return /** @type {SVGElement} */ (s.firstElementChild)
+const NS = 'http://www.w3.org/2000/svg'
+/** @param {string} id icon: a `<symbol id="i-…">` in index.html */
+const svg = (id) => {
+  const s = document.createElementNS(NS, 'svg')
+  const u = document.createElementNS(NS, 'use')
+  s.setAttribute('viewBox', '0 0 24 24')
+  u.setAttribute('href', `#i-${id}`)
+  s.append(u)
+  return s
 }
 /**
  * @param {string} label
@@ -135,26 +103,16 @@ const thumb = (a) => {
   else i.style.background = a.color
   return h('div', { className: 'th' }, i)
 }
-/** Default colours for new furniture: org palette tokens, with fallbacks (a colour input needs hex). */
-const PALETTE = /** @type {const} */ ([
-  ['--green', '#50fa7b'],
-  ['--accent', '#8be9fd'],
-  ['--orange', '#ffb86c'],
-  ['--pink', '#ff79c6'],
-  ['--purple', '#bd93f9'],
-  ['--red', '#ff5555'],
-])
+/** Default colours for new furniture: org palette tokens, all #rrggbb as a colour input needs. */
+const PALETTE = ['--green', '--accent', '--orange', '--pink', '--purple', '--red']
 /**
  * @param {number} i index, wraps around
  * @returns {string} #rrggbb
  */
-const paletteColor = (i) => {
-  const [name, fallback] = PALETTE[i % PALETTE.length]
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-  return /^#[0-9a-f]{6}$/i.test(v) ? v : fallback
-}
-/** @param {string} s */
-const kbd = (s) => s.replace(/\[(.+?)\]/g, '<kbd>$1</kbd>')
+const paletteColor = (i) =>
+  getComputedStyle(document.documentElement)
+    .getPropertyValue(PALETTE[i % PALETTE.length])
+    .trim()
 const narrow = matchMedia('(max-width: 1200px)')
 
 /**
@@ -235,7 +193,7 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
                       },
                     },
                   },
-                  svg(I.x),
+                  svg('x'),
                 ),
               ]
             : []),
@@ -276,19 +234,19 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
             },
           },
         },
-        svg(I.copy),
+        svg('copy'),
       ),
     )
-  const help = h('dialog', { className: 'help' })
+  const help = /** @type {HTMLDialogElement} */ (document.getElementById('help'))
   top.append(
-    btn('', () => panel('left'), { icon: I.catalog, cls: 'ghost icon', title: 'Furniture panel' }),
+    btn('', () => panel('left'), { icon: 'catalog', cls: 'ghost icon', title: 'Furniture panel' }),
     h('div', { className: 'brand' }, h('i'), h('span', { textContent: 'flatplan' })),
     tabs,
     h(
       'div',
       { className: 'hgroup' },
       btn('', () => (help.open ? help.close() : help.showModal()), {
-        icon: I.help,
+        icon: 'help',
         cls: 'ghost icon',
         title: 'Help  ?',
       }),
@@ -313,10 +271,10 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
               0,
             )
         },
-        { icon: I.upload, cls: 'ghost wide' },
+        { icon: 'upload', cls: 'ghost wide' },
       ),
       btn('Export', () => exportFile('flatplan.json', JSON.stringify(p())), {
-        icon: I.download,
+        icon: 'download',
         cls: 'ghost wide',
       }),
       btn(
@@ -329,10 +287,10 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
           ed.changed()
           ed.fit()
         },
-        { icon: I.reset, cls: 'ghost icon', title: 'Reset project' },
+        { icon: 'reset', cls: 'ghost icon', title: 'Reset project' },
       ),
       btn('', () => panel('right'), {
-        icon: I.right,
+        icon: 'right',
         cls: 'ghost icon',
         title: 'Properties panel',
       }),
@@ -342,11 +300,11 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
   // ============ floating toolbar / zoom / status / actions ============
   /** @type {[Tool, string, string][]} */
   const tools = [
-    ['select', I.cursor, 'Select  V'],
-    ['wall', I.wall, 'Draw walls  W'],
-    ['door', I.door, 'Door  D'],
-    ['window', I.window, 'Window  N'],
-    ['scale', I.ruler, 'Calibrate image scale'],
+    ['select', 'cursor', 'Select  V'],
+    ['wall', 'wall', 'Draw walls  W'],
+    ['door', 'door', 'Door  D'],
+    ['window', 'window', 'Window  N'],
+    ['scale', 'ruler', 'Calibrate image scale'],
   ]
   const toolBtns = tools.map(([t, ic, tip]) =>
     h(
@@ -359,10 +317,10 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
   /** @param {string} icon @param {() => void} fn @param {string} tip */
   const toolBtn = (icon, fn, tip) =>
     h('button', { className: 'tool', type: 'button', title: tip, on: { click: fn } }, svg(icon))
-  const undoBtn = toolBtn(I.undo, () => ed.undo(), 'Undo  Ctrl+Z · two-finger tap')
-  const redoBtn = toolBtn(I.redo, () => ed.redo(), 'Redo  Shift+Ctrl+Z')
+  const undoBtn = toolBtn('undo', () => ed.undo(), 'Undo  Ctrl+Z · two-finger tap')
+  const redoBtn = toolBtn('redo', () => ed.redo(), 'Redo  Shift+Ctrl+Z')
   const multiBtn = toolBtn(
-    I.multi,
+    'multi',
     () => {
       if (ed.tool !== 'select') ed.setTool('select')
       ed.multi = !ed.multi
@@ -411,7 +369,7 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
   const warnToast = () =>
     notify(
       warn ?? '',
-      btn('Reload', () => location.reload(), { icon: I.reset, cls: 'ghost' }),
+      btn('Reload', () => location.reload(), { icon: 'reset', cls: 'ghost' }),
       0,
     )
   /** the save block is lifted (Import, Reset) */
@@ -420,11 +378,11 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
     did === 'undo'
       ? notify(
           'Undone',
-          btn('Redo', () => ed.redo(), { icon: I.redo, cls: 'ghost' }),
+          btn('Redo', () => ed.redo(), { icon: 'redo', cls: 'ghost' }),
         )
       : notify(
           'Redone',
-          btn('Undo', () => ed.undo(), { icon: I.undo, cls: 'ghost' }),
+          btn('Undo', () => ed.undo(), { icon: 'undo', cls: 'ghost' }),
         )
   if (warn) warnToast()
 
@@ -444,7 +402,7 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
       } else if (v.version && v.version !== running)
         notify(
           'Update available',
-          btn('Reload', () => location.reload(), { icon: I.reset, cls: 'ghost' }),
+          btn('Reload', () => location.reload(), { icon: 'reset', cls: 'ghost' }),
           0,
         )
     } catch {} // offline, or a static host without /version
@@ -458,10 +416,10 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
   const pct = h('span', { className: 'pct' })
   ed.onView = () => (pct.textContent = `${Math.round(ed.k * 100)} %`)
   $('#zoomer').append(
-    btn('', () => ed.zoom(1 / 1.25), { icon: I.minus, cls: 'icon', title: 'Zoom out' }),
+    btn('', () => ed.zoom(1 / 1.25), { icon: 'minus', cls: 'icon', title: 'Zoom out' }),
     pct,
-    btn('', () => ed.zoom(1.25), { icon: I.plus, cls: 'icon', title: 'Zoom in' }),
-    btn('', () => ed.fit(), { icon: I.fit, cls: 'icon', title: 'Fit  F' }),
+    btn('', () => ed.zoom(1.25), { icon: 'plus', cls: 'icon', title: 'Zoom in' }),
+    btn('', () => ed.fit(), { icon: 'fit', cls: 'icon', title: 'Fit  F' }),
   )
 
   const st = { mode: h('b'), hint: h('span'), c: h('span', { className: 'c' }) }
@@ -507,163 +465,110 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
       if (document.activeElement !== lenIn) lenIn.value = ed.lenBuf
       kids = [
         h('div', { className: 'in len' }, lenIn, h('span', { className: 'u', textContent: 'cm' })),
-        arrow(1, 0, I.aR),
-        arrow(0, 1, I.aD),
-        arrow(-1, 0, I.aL),
-        arrow(0, -1, I.aU),
+        arrow(1, 0, 'aR'),
+        arrow(0, 1, 'aD'),
+        arrow(-1, 0, 'aL'),
+        arrow(0, -1, 'aU'),
         sep(),
-        btn('', () => ed.undoPoint(), { icon: I.undo, cls: 'icon', title: 'Undo last corner' }),
-        btn('Done', () => ed.endWall(), { icon: I.check, cls: 'pri' }),
+        btn('', () => ed.undoPoint(), { icon: 'undo', cls: 'icon', title: 'Undo last corner' }),
+        btn('Done', () => ed.endWall(), { icon: 'check', cls: 'pri' }),
       ]
     } else if (o)
       kids = [
         ...(o.kind === 'door'
           ? [
-              btn('Hinge', () => ((o.hinge = o.hinge ? 0 : 1), ed.changed()), { icon: I.flip }),
+              btn('Hinge', () => ((o.hinge = o.hinge ? 0 : 1), ed.changed()), { icon: 'flip' }),
               btn('Swing', () => ((o.swing = o.swing === 1 ? -1 : 1), ed.changed()), {
-                icon: I.rotr,
+                icon: 'rotr',
               }),
               sep(),
             ]
           : []),
-        btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: `Delete ${o.kind}` }),
+        btn('', () => ed.del(), { icon: 'trash', cls: 'icon danger', title: `Delete ${o.kind}` }),
       ]
     else if (w) {
       const m = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }
       kids = [
-        btn('Door', () => ed.addOpening('door', m), { icon: I.door }),
-        btn('Window', () => ed.addOpening('window', m), { icon: I.window }),
+        btn('Door', () => ed.addOpening('door', m), { icon: 'door' }),
+        btn('Window', () => ed.addOpening('window', m), { icon: 'window' }),
         sep(),
-        btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: 'Delete wall' }),
+        btn('', () => ed.del(), { icon: 'trash', cls: 'icon danger', title: 'Delete wall' }),
       ]
     } else if (n)
       kids = [
         ...(n > 1 ? [h('span', { className: 'count', textContent: `${n}` })] : []),
         btn('', () => ed.selectAll(), {
-          icon: I.all,
+          icon: 'all',
           cls: 'icon',
           title: 'Select everything  Ctrl+A',
         }),
         sep(),
-        btn('90', () => ed.rotate(-90), { icon: I.rotl, title: 'Rotate −90°  Shift+R' }),
-        btn('15', () => ed.rotate(-15), { icon: I.rotl, title: 'Rotate −15°  Q' }),
-        btn('15', () => ed.rotate(15), { icon: I.rotr, title: 'Rotate +15°  E' }),
-        btn('90', () => ed.rotate(90), { icon: I.rotr, title: 'Rotate +90°  R' }),
+        btn('90', () => ed.rotate(-90), { icon: 'rotl', title: 'Rotate −90°  Shift+R' }),
+        btn('15', () => ed.rotate(-15), { icon: 'rotl', title: 'Rotate −15°  Q' }),
+        btn('15', () => ed.rotate(15), { icon: 'rotr', title: 'Rotate +15°  E' }),
+        btn('90', () => ed.rotate(90), { icon: 'rotr', title: 'Rotate +90°  R' }),
         sep(),
-        btn('', () => ed.dup(), { icon: I.copy, cls: 'icon', title: 'Duplicate  Ctrl+D' }),
-        btn('', () => ed.del(), { icon: I.trash, cls: 'icon danger', title: 'Delete  Del' }),
+        btn('', () => ed.dup(), { icon: 'copy', cls: 'icon', title: 'Duplicate  Ctrl+D' }),
+        btn('', () => ed.del(), { icon: 'trash', cls: 'icon danger', title: 'Delete  Del' }),
       ]
     actions.replaceChildren(...kids)
     actions.hidden = !kids.length
   }
 
-  // ============ dialogs ============
-  const f = {
-    name: h('input', { placeholder: 'e.g. Sofa' }),
-    w: h('input', { type: 'number', inputMode: 'decimal', min: '1' }),
-    d: h('input', { type: 'number', inputMode: 'decimal', min: '1' }),
-    h: h('input', { type: 'number', inputMode: 'decimal', min: '0' }),
-    color: h('input', { type: 'color' }),
-    img: '',
-  }
+  // ============ dialogs, markup in index.html ============
+  const dlg = /** @type {HTMLDialogElement} */ (document.getElementById('item'))
+  const form = /** @type {HTMLFormElement} */ (dlg.firstElementChild)
+  const el = (/** @type {string} */ n) =>
+    /** @type {HTMLInputElement} */ (form.elements.namedItem(n))
+  const f = { name: el('name'), w: el('w'), d: el('d'), h: el('h'), color: el('color'), img: '' }
   /** @type {Asset | null} */
   let editing = null
-  const imgBtn = file(
-    'Top-view image',
-    'image/*',
-    async (fl) => {
-      const src = await shrinkImage(await readFile(fl, 'dataURL'), 600).catch(() => '')
-      if (!src) return alert('Not an image file.')
-      f.img = src
-      syncImg()
-    },
-    { icon: I.image },
-  )
+  el('file').addEventListener('change', async () => {
+    const fl = el('file').files?.[0]
+    el('file').value = ''
+    if (!fl) return
+    const src = await shrinkImage(await readFile(fl, 'dataURL'), 600).catch(() => '')
+    if (!src) return alert('Not an image file.')
+    f.img = src
+    syncImg()
+  })
   const syncImg = () => {
-    ;/** @type {HTMLElement} */ (imgBtn.querySelector('span')).textContent = f.img
+    ;/** @type {HTMLElement} */ (el('file').previousElementSibling).textContent = f.img
       ? 'Image set'
       : 'Top-view image'
-    clearImg.hidden = !f.img
+    el('clear').hidden = !f.img
   }
-  const clearImg = btn('', () => ((f.img = ''), syncImg()), {
-    icon: I.x,
-    cls: 'icon',
-    title: 'remove image',
+  el('clear').addEventListener('click', () => ((f.img = ''), syncImg()))
+  const dTitle = /** @type {HTMLElement} */ (form.querySelector('.dh span'))
+  const dDel = el('del')
+  dDel.addEventListener('click', () => {
+    if (!editing || !confirm(`Delete "${editing.name}" and every placed copy?`)) return
+    const id = editing.id
+    p().assets = p().assets.filter((a) => a.id !== id)
+    p().layouts.forEach((l) => (l.items = l.items.filter((i) => i.asset !== id)))
+    dlg.close()
+    ed.sel = null
+    ed.changed()
   })
-  const dTitle = h('span')
-  const dDel = btn(
-    'Delete',
-    () => {
-      if (!editing || !confirm(`Delete "${editing.name}" and every placed copy?`)) return
-      const id = editing.id
-      p().assets = p().assets.filter((a) => a.id !== id)
-      p().layouts.forEach((l) => (l.items = l.items.filter((i) => i.asset !== id)))
-      dlg.close()
-      ed.sel = null
-      ed.changed()
-    },
-    { cls: 'danger', icon: I.trash },
-  )
-  /** @param {HTMLInputElement} i */
-  const cm = (i) =>
-    h('div', { className: 'in' }, i, h('span', { className: 'u', textContent: 'cm' }))
-  const dlg = h(
-    'dialog',
-    {},
-    h(
-      'form',
-      {
-        method: 'dialog',
-        on: {
-          submit: (/** @type {Event} */ e) => {
-            e.preventDefault()
-            const v = {
-              name: f.name.value.trim() || 'Item',
-              w: +f.w.value || 50,
-              d: +f.d.value || 50,
-              h: +f.h.value || 0,
-              color: f.color.value,
-            }
-            if (editing) {
-              Object.assign(editing, v)
-              if (f.img) editing.img = f.img
-              else delete editing.img
-            } else p().assets.push({ id: uid(), ...v, ...(f.img ? { img: f.img } : {}) })
-            dlg.close()
-            ed.changed()
-          },
-        },
-      },
-      h(
-        'div',
-        { className: 'dh' },
-        dTitle,
-        btn('', () => dlg.close(), { icon: I.x, cls: 'ghost icon' }),
-      ),
-      field('Name', h('div', { className: 'in' }, f.name)),
-      h(
-        'div',
-        { className: 'g3' },
-        field('Width', cm(f.w)),
-        field('Depth', cm(f.d)),
-        field('Height', cm(f.h)),
-      ),
-      h(
-        'div',
-        { className: 'g2' },
-        field('Colour', h('div', { className: 'in' }, f.color)),
-        field('Image (optional)', h('div', { className: 'row' }, imgBtn, clearImg)),
-      ),
-      h(
-        'div',
-        { className: 'df' },
-        dDel,
-        btn('Cancel', () => dlg.close()),
-        h('button', { className: 'btn pri', type: 'submit', textContent: 'Save' }),
-      ),
-    ),
-  )
-  body.append(dlg)
+  el('close').addEventListener('click', () => dlg.close())
+  el('cancel').addEventListener('click', () => dlg.close())
+  form.addEventListener('submit', (e) => {
+    e.preventDefault()
+    const v = {
+      name: f.name.value.trim() || 'Item',
+      w: +f.w.value || 50,
+      d: +f.d.value || 50,
+      h: +f.h.value || 0,
+      color: f.color.value,
+    }
+    if (editing) {
+      Object.assign(editing, v)
+      if (f.img) editing.img = f.img
+      else delete editing.img
+    } else p().assets.push({ id: uid(), ...v, ...(f.img ? { img: f.img } : {}) })
+    dlg.close()
+    ed.changed()
+  })
   /** @param {Asset | null} a */
   const openDlg = (a) => {
     editing = a
@@ -681,29 +586,13 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
   }
 
   // real length of the segment marked with the scale tool
-  const scaleIn = h('input', { type: 'number', inputMode: 'decimal', min: '1' })
+  const scaleDlg = /** @type {HTMLDialogElement} */ (document.getElementById('scale'))
+  const scaleIn = /** @type {HTMLInputElement} */ (scaleDlg.querySelector('input'))
   /** @type {(v: number | null) => void} */
   let scaleDone = () => {}
-  const scaleDlg = h(
-    'dialog',
-    {
-      on: { close: () => scaleDone(scaleDlg.returnValue === 'ok' ? +scaleIn.value || null : null) },
-    },
-    h(
-      'form',
-      { method: 'dialog' },
-      h('div', { className: 'dh' }, 'Set image scale'),
-      h('div', { className: 'hint', textContent: 'Real length of the segment you marked:' }),
-      field('Length', cm(scaleIn)),
-      h(
-        'div',
-        { className: 'df' },
-        h('button', { className: 'btn', value: 'cancel', textContent: 'Cancel' }),
-        h('button', { className: 'btn pri', value: 'ok', textContent: 'Apply' }),
-      ),
-    ),
+  scaleDlg.addEventListener('close', () =>
+    scaleDone(scaleDlg.returnValue === 'ok' ? +scaleIn.value || null : null),
   )
-  body.append(scaleDlg)
   ed.askLength = (measured) =>
     new Promise((res) => {
       scaleDone = res
@@ -773,7 +662,7 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
         h(
           'div',
           { className: 'act' },
-          btn('', () => openDlg(a), { icon: I.edit, cls: 'icon ghost', title: 'Edit' }),
+          btn('', () => openDlg(a), { icon: 'edit', cls: 'icon ghost', title: 'Edit' }),
         ),
       )
       draggable(card, a)
@@ -798,7 +687,7 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
       'div',
       { className: 'ph' },
       h('h2', { textContent: 'Furniture' }),
-      btn('New', () => openDlg(null), { icon: I.plus, cls: 'pri' }),
+      btn('New', () => openDlg(null), { icon: 'plus', cls: 'pri' }),
     ),
     cards,
   )
@@ -836,7 +725,7 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
           'Rotation',
           numIn(it.rot, (v) => ((it.rot = v), ed.changed()), '°', 15),
         ),
-        btn('Edit item', () => openDlg(a), { icon: I.edit }),
+        btn('Edit item', () => openDlg(a), { icon: 'edit' }),
       )
     } else if (ed.count() > 1) {
       const its = ed.selectedItems()
@@ -900,12 +789,16 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
       )
     } else
       insp.replaceChildren(
-        h('div', {
-          className: 'hint',
-          innerHTML: kbd(
-            'Select an item, door or wall to edit it.<br><br>Drag to pan, pinch or scroll to zoom, [F] fits the view.',
-          ),
-        }),
+        h(
+          'div',
+          { className: 'hint' },
+          'Select an item, door or wall to edit it.',
+          h('br'),
+          h('br'),
+          'Drag to pan, pinch or scroll to zoom, ',
+          h('kbd', { textContent: 'F' }),
+          ' fits the view.',
+        ),
       )
   }
 
@@ -938,11 +831,11 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
           ed.setTool('scale')
           closeDrawers()
         },
-        { icon: I.image },
+        { icon: 'image' },
       ),
       im
-        ? btn('Remove', () => (delete p().plan.image, ed.changed()), { icon: I.x })
-        : btn('Set scale', () => (ed.setTool('scale'), closeDrawers()), { icon: I.ruler }),
+        ? btn('Remove', () => (delete p().plan.image, ed.changed()), { icon: 'x' })
+        : btn('Set scale', () => (ed.setTool('scale'), closeDrawers()), { icon: 'ruler' }),
     )
     opacity.value = String(im?.opacity ?? 0.6)
     opacity.disabled = !im
@@ -966,111 +859,14 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
           if (confirm('Delete all walls?'))
             ((p().plan.walls = []), (p().plan.openings = []), ed.changed())
         },
-        { cls: 'danger', icon: I.trash },
+        { cls: 'danger', icon: 'trash' },
       ),
     ),
   )
 
-  // ============ help overlay (? button / ? key) ============
-  /**
-   * @param {string} k
-   * @param {string} d
-   */
-  const row = (k, d) =>
-    h(
-      'div',
-      { className: 'hrow' },
-      h('span', { innerHTML: kbd(k) }),
-      h('span', { innerHTML: kbd(d) }),
-    )
-  /**
-   * @param {string} title
-   * @param {...HTMLElement} rows
-   */
-  const col = (title, ...rows) =>
-    h('div', { className: 'hcol' }, h('h3', { textContent: title }), ...rows)
-  help.append(
-    h(
-      'div',
-      { className: 'dh' },
-      'flatplan: shortcuts & how-to',
-      btn('', () => help.close(), { icon: I.x, cls: 'ghost icon' }),
-    ),
-    h(
-      'div',
-      { className: 'hgrid' },
-      col(
-        'Touch & Pencil',
-        row('tap', 'Select; in a drawing tool, place a point'),
-        row('drag', 'Move the selection, else pan'),
-        row('pinch', 'Zoom and pan with two fingers'),
-        row('Pencil', 'Once used, only the Pencil places points; fingers pan and zoom'),
-        row('handle', 'Drag the dot above an item to rotate (15° steps)'),
-        row('two-finger tap', 'Undo; the pill that appears offers Redo (also the toolbar arrows)'),
-        row(
-          'multi-select button',
-          'Next to Select: taps add / remove furniture, walls, doors; drag draws a box',
-        ),
-        row(
-          'long-press',
-          'Same without the button: on something toggles it, on empty space starts a box',
-        ),
-        row('selected wall', 'Drag it to move; walls joined to it stretch along'),
-      ),
-      col(
-        'Walls',
-        row('tap', 'Place corner; tap first corner to close, last corner to finish'),
-        row('length + arrow', 'Exact segment in cm (bottom bar)'),
-        row('[0-9] [Enter]', 'Same from the keyboard, along the cursor axis'),
-        row('[Shift]', 'Lock to 90°'),
-        row('[Ctrl]', 'Disable grid snap'),
-      ),
-      col(
-        'Furniture',
-        row('tap / drag card', 'Place in the middle / where you drop it'),
-        row('drag', 'Stops at walls and door swings, snaps to wall faces'),
-        row('[R] / [Shift]+[R]', 'Rotate ±90°'),
-        row('[Q] / [E]', 'Rotate ±15°'),
-        row('[↑][↓][←][→]', 'Nudge 1 cm ([Shift] = 10)'),
-        row('[Ctrl]+[D] / [Del]', 'Duplicate / remove'),
-        row('[Shift]+click / drag', 'Add to selection / box select (Pencil: drag on empty space)'),
-        row('[Ctrl]+[A]', 'Select all items'),
-        row('[Ctrl]+[Z] / [Shift]+[Ctrl]+[Z]', 'Undo / redo'),
-      ),
-      col(
-        'Doors & windows',
-        row('[D] / [N]', 'Tool; then tap a wall'),
-        row('drag', 'Slide along the wall'),
-        row('bottom bar', 'Hinge side, swing side'),
-        row('', 'Door swing zone is solid for furniture'),
-      ),
-      col(
-        'View',
-        row('wheel / pinch', 'Zoom'),
-        row('drag empty', 'Pan'),
-        row('[F]', 'Fit everything'),
-        row('[V] [W] [Esc]', 'Select, walls, finish'),
-      ),
-      col(
-        'Plan image',
-        row('Upload plan', 'Then tap two points with a known distance and enter it'),
-        row('opacity', 'Fade the scan under your walls'),
-        row('Export / Import', 'Whole project as JSON incl. images'),
-        row(
-          '',
-          'Could not read the saved project? Nothing is saved until you reload (export your edits first), or Import or Reset to replace it',
-        ),
-      ),
-    ),
-    h(
-      'div',
-      { className: 'hint foot' },
-      h('span', { innerHTML: kbd('Press [?] anytime to open this. ') }),
-      h('a', { href: '../', target: '_blank', textContent: 'Full documentation' }),
-      ver,
-    ),
-  )
-  body.append(help)
+  // ============ help overlay (? button / ? key), markup in index.html ============
+  help.querySelector('.dh .btn')?.addEventListener('click', () => help.close())
+  help.querySelector('.foot')?.append(ver)
   window.addEventListener('keydown', (e) => {
     if (e.key === '?' && !(e.target instanceof Element && e.target.matches('input,textarea'))) {
       e.preventDefault()

@@ -68,6 +68,8 @@ test('place an item, reload, export, reset and import', async () => {
   /** @type {string[]} */
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
+  // CSP violations and failed loads end up here
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   await page.goto(`http://127.0.0.1:${PORT}/`)
 
   await page.click('#left .ph button')

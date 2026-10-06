@@ -40,30 +40,28 @@ const TAP_PX = 8 // pointer travel below this is a tap, above it a drag
 const TURN_PX = 28 // rotation handle distance beyond the item edge
 const HOLD_MS = 450 // touch long-press: multi-select
 const GESTURE_TAP_MS = 300 // two-finger tap = undo, three-finger tap = redo
-/** Canvas colours: org token (tokens.css custom property) and the fallback used before it loads. */
+/** Canvas colours: org tokens (tokens.css custom properties), read before the first render. */
 const TOKENS = {
-  swing: ['--muted', '#6272a4'],
-  bg: ['--bg', '#0b0d10'],
-  grid: ['--grid', 'rgba(238, 244, 255, 0.035)'],
-  grid2: ['--line', 'rgba(98, 114, 164, 0.25)'],
-  wall: ['--fg', '#f8f8f2'],
-  acc: ['--accent', '#8be9fd'],
-  bad: ['--danger', '#ff5555'],
-  pill: ['--card', '#15171f'],
-  pillLine: ['--line', 'rgba(98, 114, 164, 0.25)'],
-  pillText: ['--fg', '#f8f8f2'],
-  handle: ['--card', '#15171f'],
-  outline: ['--ghost', 'rgba(255, 255, 255, 0.18)'],
-  font: ['--font', 'ui-monospace, Menlo, monospace'],
+  swing: '--muted',
+  bg: '--bg',
+  grid: '--grid',
+  grid2: '--line',
+  wall: '--fg',
+  acc: '--accent',
+  bad: '--danger',
+  pill: '--card',
+  pillLine: '--line',
+  pillText: '--fg',
+  handle: '--card',
+  outline: '--ghost',
+  font: '--font',
 }
-const C = /** @type {Record<keyof typeof TOKENS, string>} */ (
-  Object.fromEntries(Object.entries(TOKENS).map(([k, [, v]]) => [k, v]))
-)
+const C = /** @type {Record<keyof typeof TOKENS, string>} */ ({})
 /** Re-read the canvas colours from the document's custom properties. */
 const readTokens = () => {
   const cs = getComputedStyle(document.documentElement)
-  for (const [k, [name, fallback]] of Object.entries(TOKENS))
-    C[/** @type {keyof typeof TOKENS} */ (k)] = cs.getPropertyValue(name).trim() || fallback
+  for (const [k, name] of Object.entries(TOKENS))
+    C[/** @type {keyof typeof TOKENS} */ (k)] = cs.getPropertyValue(name).trim()
 }
 /**
  * `col` (a hex or rgb() token) at alpha `a` (0..1), multiplied into any alpha it already has.

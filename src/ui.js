@@ -161,8 +161,9 @@ const narrow = matchMedia('(max-width: 1200px)')
  * Build header, side panels, floating controls and dialogs around the editor.
  * @param {{ top: HTMLElement, left: HTMLElement, right: HTMLElement, main: HTMLElement }} el
  * @param {Editor} ed
- * @param {(p: Project) => void} setProject
- * @param {string} [warn] shown in the toast at start, with a reload button
+ * @param {(p: any) => string[]} setProject check and use a project the user chose (Import, Reset),
+ *   lift a save block; returns the names of the images it dropped, throws when it is not a project
+ * @param {string} [warn] shown in the toast while saving is blocked, with a reload button
  * @returns {() => void} refresh everything from the project
  */
 export function buildUI({ top, left, right, main }, ed, setProject, warn) {
@@ -295,14 +296,22 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
         'Import',
         'application/json,.json',
         async (f) => {
+          let dropped
           try {
-            setProject(JSON.parse(await readFile(f, 'text')))
+            dropped = setProject(JSON.parse(await readFile(f, 'text')))
           } catch {
             return alert('Not a flatplan project file.')
           }
+          unblock()
           ed.sel = null
           ed.changed()
           ed.fit()
+          if (dropped.length)
+            notify(
+              `Images not imported (only embedded ones are kept): ${dropped.join(', ')}`,
+              btn('OK', () => (toast.hidden = true), { cls: 'ghost' }),
+              0,
+            )
         },
         { icon: I.upload, cls: 'ghost wide' },
       ),
@@ -315,6 +324,7 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
         () => {
           if (!confirm('Erase everything? Export first if unsure.')) return
           setProject(blank())
+          unblock()
           ed.sel = null
           ed.changed()
           ed.fit()
@@ -395,8 +405,17 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
     toast.replaceChildren(h('span', { textContent: text }), action)
     toast.hidden = false
     clearTimeout(toastT)
-    if (ms) toastT = window.setTimeout(() => (toast.hidden = true), ms)
+    if (ms) toastT = window.setTimeout(() => (warn ? warnToast() : (toast.hidden = true)), ms)
   }
+  // while saving is blocked the warning comes back after every other toast
+  const warnToast = () =>
+    notify(
+      warn ?? '',
+      btn('Reload', () => location.reload(), { icon: I.reset, cls: 'ghost' }),
+      0,
+    )
+  /** the save block is lifted (Import, Reset) */
+  const unblock = () => warn && ((warn = ''), (toast.hidden = true))
   ed.onHistory = (did) =>
     did === 'undo'
       ? notify(
@@ -407,12 +426,7 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
           'Redone',
           btn('Undo', () => ed.undo(), { icon: I.undo, cls: 'ghost' }),
         )
-  if (warn)
-    notify(
-      warn,
-      btn('Reload', () => location.reload(), { icon: I.reset, cls: 'ghost' }),
-      0,
-    )
+  if (warn) warnToast()
 
   // An app opened from the home screen resumes the old page instead of reloading, so check the
   // served commit when it comes back to the foreground and offer a reload after a deploy.
@@ -1044,7 +1058,7 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
         row('Export / Import', 'Whole project as JSON incl. images'),
         row(
           '',
-          'Could not read the saved project? Export your edits before reloading: nothing is saved until then',
+          'Could not read the saved project? Nothing is saved until you reload (export your edits first), or Import or Reset to replace it',
         ),
       ),
     ),

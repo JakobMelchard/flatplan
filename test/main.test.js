@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { blank } from '../src/model.js'
 
 // main.js wires the store to a canvas editor and the whole UI. Those need a real DOM, so they
 // are replaced by stand-ins that record what main.js hands them; store.js and model.js are real.
@@ -85,5 +86,28 @@ test('after a read error main.js hands the warning to the UI and nothing is save
   seen.on.visibilitychange()
   await sleep(10)
   assert.equal(seen.puts.length, puts)
+  assert.deepEqual(seen.alerts, [])
+})
+
+test('Import after a read error lifts the block and reports the images it dropped', async () => {
+  seen.readError = new Error('boom')
+  await start()
+  const p = blank()
+  p.assets.push({
+    id: 'a',
+    name: 'Sofa',
+    w: 1,
+    d: 1,
+    h: 1,
+    color: '#000000',
+    img: 'https://x/y.png',
+  })
+  // what Import hands over; Reset passes blank()
+  assert.deepEqual(/** @type {any} */ (seen.ui[2])(p), ['Sofa'])
+  assert.equal(seen.ed.p.assets[0].img, undefined)
+  const puts = seen.puts.length
+  seen.ed.onChange()
+  await sleep(350)
+  assert.equal(seen.puts.length, puts + 1)
   assert.deepEqual(seen.alerts, [])
 })

@@ -4,11 +4,11 @@ import { blank } from '../src/model.js'
 
 /**
  * Stand-in for indexedDB with one store. Requests settle on a later tick, like the real thing.
- * @param {{ record?: unknown, readError?: Error, putErrors?: number }} [o] stored record, error
- *   for every get, number of puts that fail before they work
+ * @param {{ record?: unknown, readError?: Error, putErrors?: number, legacy?: string }} [o] stored
+ *   record, error for every get, number of puts that fail before they work, localStorage project
  */
 const fakeDB = (o = {}) => {
-  const log = { opens: 0, closes: 0, puts: /** @type {unknown[]} */ ([]) }
+  const log = { opens: 0, closes: 0, puts: /** @type {unknown[]} */ ([]), legacy: o.legacy }
   let putErrors = o.putErrors ?? 0
   /**
    * @param {unknown} result
@@ -30,7 +30,7 @@ const fakeDB = (o = {}) => {
   const db = { close: () => log.closes++, transaction: () => ({ objectStore: () => store }) }
   const globals = {
     indexedDB: { open: () => (log.opens++, request(db)) },
-    localStorage: { getItem: () => null, removeItem() {} },
+    localStorage: { getItem: () => log.legacy ?? null, removeItem: () => (log.legacy = undefined) },
   }
   for (const [k, value] of Object.entries(globals))
     Object.defineProperty(globalThis, k, { value, configurable: true })
@@ -71,6 +71,34 @@ test('a read error is reported to the caller and nothing is saved after it', asy
   assert.match((await save(blank())) ?? '', /not saved/)
   assert.match((await save(blank())) ?? '', /not saved/)
   assert.deepEqual(log.puts, [])
+})
+
+test('after a read error, resume() lets the project the user chose be saved', async () => {
+  const log = fakeDB({ readError: new Error('boom') })
+  const { load, save, resume } = await fresh()
+  await assert.rejects(load(), /reload, import or reset/)
+  // Import or Reset
+  resume()
+  assert.equal(await save(blank()), null)
+  assert.equal(log.puts.length, 1)
+})
+
+test('the legacy localStorage project moves to IndexedDB and its key goes after the save', async () => {
+  const legacy = JSON.stringify(blank())
+  const log = fakeDB({ legacy })
+  const { load } = await fresh()
+  assert.deepEqual(await load(), JSON.parse(legacy))
+  assert.equal(log.puts.length, 1)
+  assert.equal(log.legacy, undefined)
+})
+
+test('the legacy key survives a failed migration save', async () => {
+  const legacy = JSON.stringify(blank())
+  const log = fakeDB({ legacy, putErrors: 1 })
+  const { load } = await fresh()
+  assert.deepEqual(await load(), JSON.parse(legacy))
+  assert.deepEqual(log.puts, [])
+  assert.equal(log.legacy, legacy)
 })
 
 test('a stored record that is not a project counts as a read error', async () => {

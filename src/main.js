@@ -1,5 +1,5 @@
 import { blank, migrate } from './model.js'
-import { load, save } from './store.js'
+import { load, resume, save } from './store.js'
 import { Editor } from './editor.js'
 import { buildUI } from './ui.js'
 import { setupFeedback } from './feedback.js'
@@ -20,7 +20,15 @@ const refresh = buildUI(
     main: /** @type {HTMLElement} */ (document.querySelector('main')),
   },
   ed,
-  (p) => (ed.p = migrate(p)),
+  (p) => {
+    /** @type {string[]} */
+    const dropped = []
+    ed.p = migrate(p, dropped)
+    // a project the user chose replaces the unreadable one
+    resume()
+    warned = false
+    return dropped
+  },
   unread,
 )
 let t = 0

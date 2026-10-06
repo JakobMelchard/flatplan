@@ -12,7 +12,7 @@ const LEGACY = 'flatplan' // localStorage key of the pre-IndexedDB versions
 
 /** @type {Promise<IDBDatabase> | undefined} */
 let conn
-// Set when the stored project could not be read. save() refuses from then on, so the blank
+// Set when the stored project could not be read. save() refuses until resume(), so the blank
 // project the app starts with is never written over the stored one.
 let unread = ''
 
@@ -49,7 +49,7 @@ const tx = async (mode, fn) => {
 
 /**
  * @returns {Promise<Project>} a blank project when nothing is stored. Rejects when the stored
- *   project cannot be read or is not a project; save() refuses until the page is reloaded.
+ *   project cannot be read or is not a project; save() refuses until reload or resume().
  */
 export const load = async () => {
   navigator.storage?.persist?.().catch(() => {})
@@ -57,20 +57,23 @@ export const load = async () => {
     const p = await tx('readonly', (s) => s.get(KEY))
     if (p) return migrate(p)
   } catch (e) {
-    unread = `Could not read the saved project (${/** @type {Error} */ (e)?.name}). Changes are not saved.`
+    unread = `Could not read the saved project (${/** @type {Error} */ (e)?.name}). Changes are not saved until you reload, import or reset.`
     throw new Error(unread, { cause: e })
   }
   try {
     const s = localStorage.getItem(LEGACY)
     if (s) {
       const p = migrate(JSON.parse(s))
-      await save(p)
-      localStorage.removeItem(LEGACY)
+      // keep the old copy until the new one is stored
+      if (!(await save(p))) localStorage.removeItem(LEGACY)
       return p
     }
   } catch {}
   return blank()
 }
+
+/** Allow saving again after a failed read: the user replaced the project (Import, Reset). */
+export const resume = () => (unread = '')
 
 /**
  * @param {Project} p

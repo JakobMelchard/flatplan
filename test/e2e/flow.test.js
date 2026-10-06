@@ -96,3 +96,50 @@ test('place an item, reload, export, reset and import', async () => {
   assert.deepEqual(errors, [])
   await ctx.close()
 })
+
+test('an import says which linked images it dropped', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } })
+  const page = await ctx.newPage()
+  await page.goto(`http://127.0.0.1:${PORT}/`)
+  const p = {
+    plan: { walls: [] },
+    assets: [{ id: 'a', name: 'Lamp', w: 30, d: 30, h: 150, img: 'https://example.com/x.png' }],
+    layouts: [{ id: 'l', name: 'Layout 1', items: [] }],
+    current: 'l',
+  }
+  await page.setInputFiles('label:has-text("Import") input[type=file]', {
+    name: 'remote.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(p)),
+  })
+  await page.locator('#toast', { hasText: 'Images not imported' }).waitFor()
+  assert.match(await page.locator('#toast').innerText(), /Lamp/)
+  await ctx.close()
+})
+
+test('after a failed read the warning stays until Reset, which saves again', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } })
+  const page = await ctx.newPage()
+  await page.goto(`http://127.0.0.1:${PORT}/`)
+  // a record that is not a project counts as a failed read
+  await page.evaluate(
+    () =>
+      new Promise((res, rej) => {
+        const r = indexedDB.open('flatplan', 1)
+        r.onsuccess = () => {
+          const t = r.result.transaction('kv', 'readwrite')
+          t.objectStore('kv').put({ plan: { walls: 'x' } }, 'project')
+          t.oncomplete = () => (r.result.close(), res(null))
+          t.onerror = rej
+        }
+      }),
+  )
+  await page.reload()
+  const toast = page.locator('#toast')
+  await toast.filter({ hasText: 'Could not read the saved project' }).waitFor()
+  page.once('dialog', (d) => d.accept())
+  await page.click('[title="Reset project"]')
+  await toast.waitFor({ state: 'hidden' })
+  await until(page, (p) => Array.isArray(p.layouts))
+  await ctx.close()
+})

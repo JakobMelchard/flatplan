@@ -13,9 +13,9 @@ change. flatplan asks for persistent storage so Safari does not evict it. Projec
 versions that used localStorage are migrated on first load.
 
 If the stored project cannot be read at start, flatplan opens a blank project, says so, and saves
-nothing until you reload, so the stored project is not overwritten. An imported project is not
-saved in that state either: export it before reloading if you want to keep it. Reset does not
-erase the stored project.
+nothing until you reload, so the stored project is not overwritten; the warning stays on screen
+meanwhile. Import and Reset replace the stored project: after either, saving resumes. Older
+versions that used localStorage keep that copy until the move to IndexedDB succeeded.
 
 The data never leaves the device on its own. Clearing site data in the browser deletes it.
 
@@ -25,6 +25,6 @@ The data never leaves the device on its own. Clearing site data in the browser d
 URLs. On the iPad the share sheet opens, so you can Save to Files, AirDrop it, or send it
 anywhere. **Import** replaces the current project with such a file. A file that is not a
 flatplan project is refused; colours other than `#rrggbb` are replaced and images that are not
-embedded data URLs are dropped.
+embedded data URLs are dropped, with a notice naming the items that lost theirs.
 
 Use it for backups and to move between devices.

@@ -1042,7 +1042,10 @@ export function buildUI({ top, left, right, main }, ed, setProject, warn) {
         row('Upload plan', 'Then tap two points with a known distance and enter it'),
         row('opacity', 'Fade the scan under your walls'),
         row('Export / Import', 'Whole project as JSON incl. images'),
-        row('', 'Could not read the saved project? Export your edits before reloading: nothing is saved until then'),
+        row(
+          '',
+          'Could not read the saved project? Export your edits before reloading: nothing is saved until then',
+        ),
       ),
     ),
     h(

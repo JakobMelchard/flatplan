@@ -125,6 +125,16 @@ const narrow = matchMedia('(max-width: 1200px)')
  * @returns {Promise<string | null>} the text field ('' without one) on OK, null otherwise
  */
 export const ask = (text, o = {}) => {
+  // one dialog for every caller: queue, so a notice cannot replace an open confirm and answer it
+  const p = asking.then(() => askNow(text, o))
+  asking = p.catch(() => {})
+  return p
+}
+/** @type {Promise<unknown>} */
+let asking = Promise.resolve()
+
+/** @param {string} text @param {{ ok?: string, cancel?: boolean, value?: string }} o */
+const askNow = (text, o) => {
   const d = /** @type {HTMLDialogElement} */ (document.getElementById('ask'))
   const input = /** @type {HTMLInputElement} */ (d.querySelector('input'))
   const msg = /** @type {HTMLElement} */ (d.querySelector('.dh'))

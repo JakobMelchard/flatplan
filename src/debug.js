@@ -2,6 +2,8 @@
 // mimi). Only runs when the server reports debug (CLIENT_LOG set in its environment); events are
 // batched to POST /log.
 
+import { layout } from './model.js'
+
 /** @typedef {import('./editor.js').Editor} Editor */
 
 /**
@@ -16,7 +18,7 @@ export function startDebugLog(ed, version) {
   const log = (o) => buf.push(JSON.stringify({ t: Math.round(performance.now() - t0), ...o }))
   const r1 = (/** @type {number} */ n) => Math.round(n)
   const state = () => ({
-    items: ed.p.layouts.find((l) => l.id === ed.p.current)?.items.length,
+    items: layout(ed.p).items.length,
     walls: ed.p.plan.walls.length,
     tool: ed.tool,
     multi: ed.multi,
@@ -60,7 +62,7 @@ export function startDebugLog(ed, version) {
         // marquee geometry, before the editor clears the drag on release
         const d = ed.drag
         if (d?.kind === 'marquee' && type !== 'pointerdown') {
-          const its = ed.p.layouts.find((l) => l.id === ed.p.current)?.items ?? []
+          const its = layout(ed.p).items
           log({
             ev: 'marquee',
             a: [r1(d.a.x), r1(d.a.y)],

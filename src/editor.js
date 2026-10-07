@@ -34,36 +34,76 @@ import { History } from './history.js'
  *   | null} Drag
  */
 
+/**
+ * Nudge the selected items by (dx, dy) cm, 10 with Shift.
+ * @param {number} dx
+ * @param {number} dy
+ * @returns {(ed: Editor, e: KeyboardEvent) => void}
+ */
+const nudgeKey = (dx, dy) => (ed, e) => {
+  if (!ed.selectedItems().length) return
+  const s = e.shiftKey ? 10 : 1
+  e.preventDefault()
+  ed.nudge(dx * s, dy * s)
+}
+/**
+ * Single-key shortcuts by KeyboardEvent.key; Editor.key handles typed wall lengths, undo / redo
+ * and select-all first.
+ * @type {Record<string, (ed: Editor, e: KeyboardEvent) => void>}
+ */
+const KEYS = {
+  Escape: (ed) => {
+    ed.multi = false
+    ed.endWall()
+    ed.scalePts = []
+    ed.sel = null
+    ed.onSelect()
+  },
+  Delete: (ed) => (ed.tool === 'wall' && ed.drawPts.length ? ed.undoPoint() : ed.del()),
+  r: (ed) => ed.rotate(90),
+  R: (ed) => ed.rotate(-90),
+  q: (ed) => ed.rotate(-15),
+  e: (ed) => ed.rotate(15),
+  d: (ed, e) => (e.ctrlKey || e.metaKey ? (e.preventDefault(), ed.dup()) : ed.setTool('door')),
+  f: (ed) => ed.fit(),
+  v: (ed) => ed.setTool('select'),
+  w: (ed) => ed.setTool('wall'),
+  n: (ed) => ed.setTool('window'),
+  ArrowLeft: nudgeKey(-1, 0),
+  ArrowRight: nudgeKey(1, 0),
+  ArrowUp: nudgeKey(0, -1),
+  ArrowDown: nudgeKey(0, 1),
+}
+KEYS.Backspace = KEYS.Delete
+
 const GRID = 5
 const SNAP_PX = 12
 const TAP_PX = 8 // pointer travel below this is a tap, above it a drag
 const TURN_PX = 28 // rotation handle distance beyond the item edge
 const HOLD_MS = 450 // touch long-press: multi-select
 const GESTURE_TAP_MS = 300 // two-finger tap = undo, three-finger tap = redo
-/** Canvas colours: org token (tokens.css custom property) and the fallback used before it loads. */
+/** Canvas colours: org tokens (tokens.css custom properties), read before the first render. */
 const TOKENS = {
-  swing: ['--muted', '#6272a4'],
-  bg: ['--bg', '#0b0d10'],
-  grid: ['--grid', 'rgba(238, 244, 255, 0.035)'],
-  grid2: ['--line', 'rgba(98, 114, 164, 0.25)'],
-  wall: ['--fg', '#f8f8f2'],
-  acc: ['--accent', '#8be9fd'],
-  bad: ['--danger', '#ff5555'],
-  pill: ['--card', '#15171f'],
-  pillLine: ['--line', 'rgba(98, 114, 164, 0.25)'],
-  pillText: ['--fg', '#f8f8f2'],
-  handle: ['--card', '#15171f'],
-  outline: ['--ghost', 'rgba(255, 255, 255, 0.18)'],
-  font: ['--font', 'ui-monospace, Menlo, monospace'],
+  swing: '--muted',
+  bg: '--bg',
+  grid: '--grid',
+  grid2: '--line',
+  wall: '--fg',
+  acc: '--accent',
+  bad: '--danger',
+  pill: '--card',
+  pillLine: '--line',
+  pillText: '--fg',
+  handle: '--card',
+  outline: '--ghost',
+  font: '--font',
 }
-const C = /** @type {Record<keyof typeof TOKENS, string>} */ (
-  Object.fromEntries(Object.entries(TOKENS).map(([k, [, v]]) => [k, v]))
-)
+const C = /** @type {Record<keyof typeof TOKENS, string>} */ ({})
 /** Re-read the canvas colours from the document's custom properties. */
 const readTokens = () => {
   const cs = getComputedStyle(document.documentElement)
-  for (const [k, [name, fallback]] of Object.entries(TOKENS))
-    C[/** @type {keyof typeof TOKENS} */ (k)] = cs.getPropertyValue(name).trim() || fallback
+  for (const [k, name] of Object.entries(TOKENS))
+    C[/** @type {keyof typeof TOKENS} */ (k)] = cs.getPropertyValue(name).trim()
 }
 /**
  * `col` (a hex or rgb() token) at alpha `a` (0..1), multiplied into any alpha it already has.
@@ -1018,60 +1058,7 @@ export class Editor {
       return k === 'y' || e.shiftKey ? this.redo() : this.undo()
     }
     if (cmd && k === 'a' && this.tool === 'select') return (e.preventDefault(), this.selectAll())
-    switch (e.key) {
-      case 'Escape':
-        this.multi = false
-        this.endWall()
-        this.scalePts = []
-        this.sel = null
-        this.onSelect()
-        break
-      case 'Delete':
-      case 'Backspace':
-        if (this.tool === 'wall' && this.drawPts.length) this.undoPoint()
-        else this.del()
-        break
-      case 'r':
-        this.rotate(90)
-        break
-      case 'R':
-        this.rotate(-90)
-        break
-      case 'q':
-        this.rotate(-15)
-        break
-      case 'e':
-        this.rotate(15)
-        break
-      case 'd':
-        if (cmd) (e.preventDefault(), this.dup())
-        else this.setTool('door')
-        break
-      case 'f':
-        this.fit()
-        break
-      case 'v':
-        this.setTool('select')
-        break
-      case 'w':
-        this.setTool('wall')
-        break
-      case 'n':
-        this.setTool('window')
-        break
-      case 'ArrowLeft':
-      case 'ArrowRight':
-      case 'ArrowUp':
-      case 'ArrowDown':
-        if (this.selectedItems().length) {
-          const s = e.shiftKey ? 10 : 1
-          e.preventDefault()
-          this.nudge(
-            e.key === 'ArrowLeft' ? -s : e.key === 'ArrowRight' ? s : 0,
-            e.key === 'ArrowUp' ? -s : e.key === 'ArrowDown' ? s : 0,
-          )
-        }
-    }
+    KEYS[e.key]?.(this, e)
     this.render()
   }
 
@@ -1248,13 +1235,46 @@ export class Editor {
   }
   render() {
     const { ctx: g, k, ox, oy } = this
-    const W = this.cv.clientWidth
-    const H = this.cv.clientHeight
     const d = devicePixelRatio
     g.setTransform(d, 0, 0, d, 0, 0)
     g.fillStyle = C.bg
-    g.fillRect(0, 0, W, H)
+    g.fillRect(0, 0, this.cv.clientWidth, this.cv.clientHeight)
     g.setTransform(d * k, 0, 0, d * k, d * ox, d * oy)
+    this.drawBackdrop()
+    // walls, with their length pills drawn after the items
+    const wallPts = this.p.plan.walls.flatMap((w) => [w.a, w.b])
+    const cen = {
+      x: wallPts.reduce((s, q) => s + q.x, 0) / (wallPts.length || 1),
+      y: wallPts.reduce((s, q) => s + q.y, 0) / (wallPts.length || 1),
+    }
+    g.lineCap = 'square'
+    this.p.plan.walls.forEach((w, i) => {
+      const on = !!this.sel?.walls.includes(w.id ?? '')
+      g.strokeStyle = on ? C.acc : C.wall
+      g.lineWidth = this.wallT()
+      g.beginPath()
+      g.moveTo(w.a.x, w.a.y)
+      g.lineTo(w.b.x, w.b.y)
+      g.stroke()
+    })
+    this.drawOpenings()
+    // names too wide for their item even at the floor size, drawn after all items
+    /** @type {{ m: DOMMatrix, a: import('./model.js').Asset, dark: boolean }[]} */
+    const over = []
+    const single = !!this.selected()
+    for (const it of layout(this.p).items) {
+      const a = asset(this.p, it.asset)
+      if (a) this.drawItem(it, a, single, over)
+    }
+    this.drawPills(over)
+    this.p.plan.walls.forEach((w) => this.wallLabel(w, C.pillText, cen))
+    this.drawOverlays(cen)
+  }
+  /** Plan image and grid. */
+  drawBackdrop() {
+    const { ctx: g, k, ox, oy } = this
+    const W = this.cv.clientWidth
+    const H = this.cv.clientHeight
     const im = this.p.plan.image
     if (im) {
       const el = this.img(im.src)
@@ -1264,7 +1284,6 @@ export class Editor {
         g.globalAlpha = 1
       }
     }
-    // grid
     const step = k > 0.6 ? 50 : k > 0.15 ? 100 : 500
     const x0 = Math.floor(-ox / k / step) * step
     const y0 = Math.floor(-oy / k / step) * step
@@ -1281,68 +1300,57 @@ export class Editor {
       g.strokeStyle = col
       g.stroke()
     }
-    // walls
-    const wallPts = this.p.plan.walls.flatMap((w) => [w.a, w.b])
-    const cen = {
-      x: wallPts.reduce((s, q) => s + q.x, 0) / (wallPts.length || 1),
-      y: wallPts.reduce((s, q) => s + q.y, 0) / (wallPts.length || 1),
+  }
+  /**
+   * Length pill beside a wall, on the side away from the plan's centre, slid along the wall off
+   * any door that swings to that side.
+   * @param {import('./model.js').Wall} w
+   * @param {string} col
+   * @param {Pt} cen centre of all wall end points
+   */
+  wallLabel(w, col, cen) {
+    const { ctx: g, k } = this
+    const { a, b } = w
+    const L = dist(a, b)
+    let ang = Math.atan2(b.y - a.y, b.x - a.x)
+    if (Math.abs(ang) > Math.PI / 2) ang += Math.PI
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    const outward = (mid.x - cen.x) * -Math.sin(ang) + (mid.y - cen.y) * Math.cos(ang)
+    const sgn = outward > 0 ? 1 : -1 // the pill's side; a wall through the centre takes the inner one
+    const side = { x: -Math.sin(ang) * sgn, y: Math.cos(ang) * sgn }
+    const txt = `${L.toFixed(0)} cm`
+    g.save()
+    g.font = `500 ${11 / k}px ${C.font}`
+    const tw = g.measureText(txt).width
+    const rx = -tw / 2 - 5 / k
+    const rw = tw + 10 / k
+    const rh = 16 / k
+    /** @type {[number, number][]} */
+    const doors = []
+    for (const o of this.openings()) {
+      const G = o.kind === 'door' && o.wall === w.id ? this.geom(o) : null
+      if (G && G.n.x * side.x + G.n.y * side.y > 0) doors.push([G.t0, G.t1])
     }
-    /**
-     * Length pill beside a wall, on the side away from the plan's centre, slid along the wall off
-     * any door that swings to that side.
-     * @param {import('./model.js').Wall} w
-     * @param {string} col
-     */
-    const label = (w, col) => {
-      const { a, b } = w
-      const L = dist(a, b)
-      let ang = Math.atan2(b.y - a.y, b.x - a.x)
-      if (Math.abs(ang) > Math.PI / 2) ang += Math.PI
-      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-      const outward = (mid.x - cen.x) * -Math.sin(ang) + (mid.y - cen.y) * Math.cos(ang)
-      const sgn = outward > 0 ? 1 : -1 // the pill's side; a wall through the centre takes the inner one
-      const side = { x: -Math.sin(ang) * sgn, y: Math.cos(ang) * sgn }
-      const txt = `${L.toFixed(0)} cm`
-      g.save()
-      g.font = `500 ${11 / k}px ${C.font}`
-      const tw = g.measureText(txt).width
-      const rx = -tw / 2 - 5 / k
-      const rw = tw + 10 / k
-      const rh = 16 / k
-      /** @type {[number, number][]} */
-      const doors = []
-      for (const o of this.openings()) {
-        const G = o.kind === 'door' && o.wall === w.id ? this.geom(o) : null
-        if (G && G.n.x * side.x + G.n.y * side.y > 0) doors.push([G.t0, G.t1])
-      }
-      const t = freeSpot(L / 2, rw / 2 + 6 / k, doors, L) / (L || 1)
-      g.translate(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
-      g.rotate(ang)
-      g.fillStyle = C.pill
-      g.strokeStyle = C.pillLine
-      g.lineWidth = 1 / k
-      const ry = sgn > 0 ? this.wallT() / 2 + 6 / k : -this.wallT() / 2 - 6 / k - rh
-      g.beginPath()
-      g.roundRect(rx, ry, rw, rh, 4 / k)
-      g.fill()
-      g.stroke()
-      g.fillStyle = col
-      g.textAlign = 'center'
-      g.textBaseline = 'middle'
-      g.fillText(txt, 0, ry + rh / 2)
-      g.restore()
-    }
-    g.lineCap = 'square'
-    this.p.plan.walls.forEach((w, i) => {
-      const on = !!this.sel?.walls.includes(w.id ?? '')
-      g.strokeStyle = on ? C.acc : C.wall
-      g.lineWidth = this.wallT()
-      g.beginPath()
-      g.moveTo(w.a.x, w.a.y)
-      g.lineTo(w.b.x, w.b.y)
-      g.stroke()
-    })
-    // openings: cut the gap, then door leaf + swing arc / window panes
+    const t = freeSpot(L / 2, rw / 2 + 6 / k, doors, L) / (L || 1)
+    g.translate(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+    g.rotate(ang)
+    g.fillStyle = C.pill
+    g.strokeStyle = C.pillLine
+    g.lineWidth = 1 / k
+    const ry = sgn > 0 ? this.wallT() / 2 + 6 / k : -this.wallT() / 2 - 6 / k - rh
+    g.beginPath()
+    g.roundRect(rx, ry, rw, rh, 4 / k)
+    g.fill()
+    g.stroke()
+    g.fillStyle = col
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.fillText(txt, 0, ry + rh / 2)
+    g.restore()
+  }
+  /** Doors and windows: cut the gap, then door leaf + swing arc / window panes. */
+  drawOpenings() {
+    const { ctx: g, k } = this
     for (const o of this.openings()) {
       const G = this.geom(o)
       if (!G) continue
@@ -1391,90 +1399,97 @@ export class Editor {
         g.stroke()
       }
     }
-    // items
-    const single = !!this.selected()
-    /** @type {{ m: DOMMatrix, a: import('./model.js').Asset, dark: boolean }[]} */
-    const over = []
-    for (const it of layout(this.p).items) {
-      const a = asset(this.p, it.asset)
-      if (!a) continue
-      g.save()
-      g.translate(it.x, it.y)
-      g.rotate((it.rot * Math.PI) / 180)
-      const on = !!this.sel?.items.includes(it.id)
-      const bad = this.collides(it, it.x, it.y, it.rot)
-      g.shadowColor = 'rgba(0,0,0,.5)'
-      g.shadowBlur = 10
-      g.shadowOffsetY = 3
-      if (a.img) {
-        const el = this.img(a.img)
-        if (el.complete && el.width) g.drawImage(el, -a.w / 2, -a.d / 2, a.w, a.d)
-      } else {
-        g.fillStyle = a.color + 'd9'
-        g.beginPath()
-        g.roundRect(-a.w / 2, -a.d / 2, a.w, a.d, Math.min(3, a.w / 8, a.d / 8))
-        g.fill()
-      }
-      g.shadowColor = 'transparent'
-      g.lineWidth = (on ? 2 : 1) / k
-      g.strokeStyle = bad ? C.bad : on ? C.acc : C.outline
-      g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d)
-      if (on) {
-        const hs = 7 / k
-        g.fillStyle = C.handle
-        for (const [sx, sy] of [
-          [-1, -1],
-          [1, -1],
-          [1, 1],
-          [-1, 1],
-        ]) {
-          g.beginPath()
-          g.rect((sx * a.w) / 2 - hs / 2, (sy * a.d) / 2 - hs / 2, hs, hs)
-          g.fill()
-          g.stroke()
-        }
-      }
-      if (on && single) {
-        // rotation handle
-        const hy = -a.d / 2 - TURN_PX / k
-        g.strokeStyle = C.acc
-        g.beginPath()
-        g.moveTo(0, -a.d / 2)
-        g.lineTo(0, hy)
-        g.stroke()
-        g.fillStyle = C.acc
-        g.beginPath()
-        g.arc(0, hy, 7 / k, 0, 7)
-        g.fill()
-      }
-      if (a.w * k > 44 && a.d * k > 18) {
-        const dark = a.img || lum(a.color) > 0.55
-        g.fillStyle = dark ? 'rgba(0,0,0,.75)' : 'rgba(255,255,255,.9)'
-        g.textAlign = 'center'
-        g.textBaseline = 'middle'
-        // keep the label upright: past 90 degrees it would read upside down
-        if (it.rot > 90 && it.rot <= 270) g.rotate(Math.PI)
-        const room = a.w - 8 / k
-        const nf = (/** @type {number} */ z) => `500 ${z / k}px ${C.font}`
-        const df = (/** @type {number} */ z) => `${z / k}px ${C.font}`
-        const dims = `${a.w} × ${a.d}`
-        // shrink the name to a floor before giving up on it; drop the size line rather than cut it
-        const nz = fitSize(g, a.name, room, 12, 9, nf)
-        const dz = nz && a.d * k > 40 ? fitSize(g, dims, room, 10.5, 8.5, df) : 0
-        if (nz) {
-          g.font = nf(nz)
-          g.fillText(a.name, 0, dz ? -7 / k : 0)
-        } else over.push({ m: g.getTransform(), a, dark: !!dark })
-        if (dz) {
-          g.font = df(dz)
-          g.fillStyle = dark ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.6)'
-          g.fillText(dims, 0, 8 / k)
-        }
-      }
-      g.restore()
+  }
+  /**
+   * @param {import('./model.js').Item} it
+   * @param {import('./model.js').Asset} a
+   * @param {boolean} single one item selected: show its rotation handle
+   * @param {{ m: DOMMatrix, a: import('./model.js').Asset, dark: boolean }[]} over gets the
+   *   items whose name does not fit, for drawPills
+   */
+  drawItem(it, a, single, over) {
+    const { ctx: g, k } = this
+    g.save()
+    g.translate(it.x, it.y)
+    g.rotate((it.rot * Math.PI) / 180)
+    const on = !!this.sel?.items.includes(it.id)
+    const bad = this.collides(it, it.x, it.y, it.rot)
+    g.shadowColor = 'rgba(0,0,0,.5)'
+    g.shadowBlur = 10
+    g.shadowOffsetY = 3
+    if (a.img) {
+      const el = this.img(a.img)
+      if (el.complete && el.width) g.drawImage(el, -a.w / 2, -a.d / 2, a.w, a.d)
+    } else {
+      g.fillStyle = a.color + 'd9'
+      g.beginPath()
+      g.roundRect(-a.w / 2, -a.d / 2, a.w, a.d, Math.min(3, a.w / 8, a.d / 8))
+      g.fill()
     }
-    // names too wide for their item even at the floor size: a pill in the item colour, centred on
-    // it and allowed past its outline, drawn after all items so a neighbour cannot cover it
+    g.shadowColor = 'transparent'
+    g.lineWidth = (on ? 2 : 1) / k
+    g.strokeStyle = bad ? C.bad : on ? C.acc : C.outline
+    g.strokeRect(-a.w / 2, -a.d / 2, a.w, a.d)
+    if (on) {
+      const hs = 7 / k
+      g.fillStyle = C.handle
+      for (const [sx, sy] of [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ]) {
+        g.beginPath()
+        g.rect((sx * a.w) / 2 - hs / 2, (sy * a.d) / 2 - hs / 2, hs, hs)
+        g.fill()
+        g.stroke()
+      }
+    }
+    if (on && single) {
+      // rotation handle
+      const hy = -a.d / 2 - TURN_PX / k
+      g.strokeStyle = C.acc
+      g.beginPath()
+      g.moveTo(0, -a.d / 2)
+      g.lineTo(0, hy)
+      g.stroke()
+      g.fillStyle = C.acc
+      g.beginPath()
+      g.arc(0, hy, 7 / k, 0, 7)
+      g.fill()
+    }
+    if (a.w * k > 44 && a.d * k > 18) {
+      const dark = a.img || lum(a.color) > 0.55
+      g.fillStyle = dark ? 'rgba(0,0,0,.75)' : 'rgba(255,255,255,.9)'
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      // keep the label upright: past 90 degrees it would read upside down
+      if (it.rot > 90 && it.rot <= 270) g.rotate(Math.PI)
+      const room = a.w - 8 / k
+      const nf = (/** @type {number} */ z) => `500 ${z / k}px ${C.font}`
+      const df = (/** @type {number} */ z) => `${z / k}px ${C.font}`
+      const dims = `${a.w} × ${a.d}`
+      // shrink the name to a floor before giving up on it; drop the size line rather than cut it
+      const nz = fitSize(g, a.name, room, 12, 9, nf)
+      const dz = nz && a.d * k > 40 ? fitSize(g, dims, room, 10.5, 8.5, df) : 0
+      if (nz) {
+        g.font = nf(nz)
+        g.fillText(a.name, 0, dz ? -7 / k : 0)
+      } else over.push({ m: g.getTransform(), a, dark: !!dark })
+      if (dz) {
+        g.font = df(dz)
+        g.fillStyle = dark ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.6)'
+        g.fillText(dims, 0, 8 / k)
+      }
+    }
+    g.restore()
+  }
+  /**
+   * A pill in the item colour, centred on it and allowed past its outline.
+   * @param {{ m: DOMMatrix, a: import('./model.js').Asset, dark: boolean }[]} over
+   */
+  drawPills(over) {
+    const { ctx: g, k } = this
     for (const { m, a, dark } of over) {
       g.save()
       g.setTransform(m)
@@ -1495,7 +1510,13 @@ export class Editor {
       g.fillText(txt, 0, 0)
       g.restore()
     }
-    this.p.plan.walls.forEach((w) => label(w, C.pillText))
+  }
+  /**
+   * Wall and scale tool state, pulse, marquee.
+   * @param {Pt} cen centre of all wall end points, for the length pill
+   */
+  drawOverlays(cen) {
+    const { ctx: g, k } = this
     // wall tool: in-progress segment, or the snapped point under a hovering mouse / pen
     const last = this.drawPts.at(-1)
     if (this.tool === 'wall' && this.cur && (last || !this.ptrs.size)) {
@@ -1507,7 +1528,7 @@ export class Editor {
         g.moveTo(last.x, last.y)
         g.lineTo(s.x, s.y)
         g.stroke()
-        label({ a: last, b: s }, C.acc)
+        this.wallLabel({ a: last, b: s }, C.acc, cen)
       }
       g.fillStyle = C.acc
       g.beginPath()

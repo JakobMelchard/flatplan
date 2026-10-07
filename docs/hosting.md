@@ -10,7 +10,7 @@ Every push to `main` runs `.github/workflows/pages.yml` once CI passed on that c
 
 1. Build `docs/` with HonKit into the site root.
    Nothing from `node_modules`, `test/` or `serve.js` is published.
-2. Stage the app shell under `app/`: `index.html`, `tokens.css`, `sw.js`, the manifest, `icons/`, `src/`, plus a `version` file with the deployed commit, which the app polls to offer a reload.
+2. Stage the app shell under `app/`: `index.html`, `app.css`, `tokens.css`, `sw.js`, the manifest, `icons/`, `src/`, plus a `version` file with the deployed commit, which the app polls to offer a reload.
    `sw.js` gets the commit as its cache name and the staged files as its precache list, so every
    deploy installs a new service worker with fresh copies.
 3. Upload and deploy through `actions/deploy-pages`.

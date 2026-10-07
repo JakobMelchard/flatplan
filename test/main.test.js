@@ -18,8 +18,8 @@ const seen = {
 const stubs = {
   './editor.js':
     'export class Editor { constructor(c, p) { this.p = p; globalThis.seen.ed = this } fit() {} setTool() {} }',
-  './ui.js': 'export const buildUI = (...a) => ((globalThis.seen.ui = a), () => {})',
-  './feedback.js': 'export const setupFeedback = () => {}',
+  './ui.js':
+    'export const buildUI = (...a) => ((globalThis.seen.ui = a), () => {}); export const ask = (m) => (globalThis.seen.alerts.push(m), Promise.resolve(""))',
 }
 registerHooks({
   resolve: (spec, ctx, next) =>

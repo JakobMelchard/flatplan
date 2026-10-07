@@ -1,8 +1,7 @@
 import { blank, migrate } from './model.js'
 import { load, resume, save } from './store.js'
 import { Editor } from './editor.js'
-import { buildUI } from './ui.js'
-import { setupFeedback } from './feedback.js'
+import { ask, buildUI } from './ui.js'
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id))
 
@@ -38,7 +37,7 @@ ed.onChange = () => {
   clearTimeout(t)
   t = window.setTimeout(async () => {
     const err = await save(ed.p)
-    if (err && !warned) ((warned = true), alert(err))
+    if (err && !warned) ((warned = true), ask(err, { cancel: false }))
   }, 300)
 }
 // flush a pending save when the app is backgrounded (iPad home gesture, tab switch)
@@ -49,8 +48,6 @@ document.addEventListener('visibilitychange', () => {
 document.addEventListener('gesturestart', (e) => e.preventDefault())
 ed.fit()
 ed.setTool('select')
-Object.assign(window, { ed })
-setupFeedback(ed, /** @type {HTMLElement} */ (document.querySelector('#top .hgroup')))
 
 if ('serviceWorker' in navigator && location.hostname !== 'localhost')
   navigator.serviceWorker.register('sw.js')

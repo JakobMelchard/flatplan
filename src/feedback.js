@@ -8,16 +8,12 @@ const NEW_ISSUE = 'https://github.com/JakobMelchard/flatplan/issues/new'
 /**
  * @param {Editor} ed
  * @param {HTMLElement} group header button group the Feedback button goes into
+ * @param {() => string} version the running version, '' until known
  */
-export function setupFeedback(ed, group) {
-  let version = ''
-  fetch('version', { cache: 'no-store' })
-    .then((r) => r.json())
-    .then((v) => (version = v.version))
-    .catch(() => {})
+export function setupFeedback(ed, group, version) {
   const context = () =>
     [
-      version && `version ${version.split(' ')[0]}`,
+      version() && `version ${version().split(' ')[0]}`,
       matchMedia('(display-mode: standalone)').matches ? 'home screen' : 'browser',
       `${innerWidth}×${innerHeight}`,
       `tool ${ed.tool}${ed.penSeen ? ', pencil' : ''}`,

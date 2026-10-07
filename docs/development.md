@@ -21,7 +21,8 @@ localhost, so test install and offline behaviour against the deployed site or a 
 
 | Path                                      | Role                                                                 |
 | ----------------------------------------- | -------------------------------------------------------------------- |
-| `index.html`                              | Markup and CSS                                                       |
+| `index.html`                              | Markup: shell, dialogs, icon sprite, CSP                             |
+| `app.css`                                 | Styles (no inline styles or scripts: the CSP blocks them)            |
 | `tokens.css`                              | Org design tokens, vendored from `JakobMelchard/.config`; never edit |
 | `src/model.js`                            | Types (JSDoc typedefs), project helpers                              |
 | `src/store.js`                            | IndexedDB persistence, export / import, image downscaling            |

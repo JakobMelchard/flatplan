@@ -36,7 +36,7 @@ jobs:
         if: steps.head.outputs.ok == 'true'
         run: |
           mkdir site/app
-          cp -r index.html tokens.css sw.js manifest.webmanifest icons src site/app
+          cp -r index.html app.css tokens.css sw.js manifest.webmanifest icons src site/app
           printf '{"version":"%s","debug":false}\n' "$(git log -1 --format='%h %s')" > site/app/version
       - name: Stamp the service worker with the commit and every shipped file
         if: steps.head.outputs.ok == 'true'

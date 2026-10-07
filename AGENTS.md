@@ -22,7 +22,9 @@ CI runs check, lint, test and e2e; the Pages deploy waits for it.
 
 ## Layout
 
-- `index.html` markup and CSS
+- `index.html` markup: shell, dialogs, icon sprite (`<symbol id="i-…">`), CSP
+- `app.css` styles; no inline styles or scripts (the CSP blocks them)
+- `src/theme.js` sets `data-theme` before first paint
 - `tokens.css` org design tokens (custom properties), vendored from
   `JakobMelchard/.config` by `config-sync tokens` (destination in
   `.config/tokens.path`); never edit, the app CSS and canvas read its variables

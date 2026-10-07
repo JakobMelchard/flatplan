@@ -43,10 +43,11 @@ const src = (/** @type {unknown} */ v) => str(v) && DATA.test(/** @type {string}
  * Check a stored or imported project and fill in fields added after it was saved. Colours and
  * image sources the app would not write itself are replaced or dropped.
  * @param {any} p unchecked
+ * @param {string[]} [dropped] gets the name of each image removed (asset name, or 'plan')
  * @returns {Project}
  * @throws {TypeError} when parts are missing or of the wrong type
  */
-export const migrate = (p) => {
+export const migrate = (p, dropped) => {
   const pl = p?.plan
   const ok =
     Array.isArray(pl?.walls) &&
@@ -85,11 +86,19 @@ export const migrate = (p) => {
   pl.walls.forEach((/** @type {Wall} */ w) => (w.id ??= uid()))
   pl.openings ??= []
   const im = pl.image
-  if (im != null && !(src(im.src) && num(im.x) && num(im.y) && num(im.cmPerPx) && num(im.opacity)))
+  if (
+    im != null &&
+    !(src(im.src) && num(im.x) && num(im.y) && num(im.cmPerPx) && num(im.opacity))
+  ) {
     delete pl.image
+    dropped?.push('plan')
+  }
   for (const a of p.assets) {
     if (!(str(a.color) && HEX.test(a.color))) a.color = '#6272a4'
-    if (a.img != null && !src(a.img)) delete a.img
+    if (a.img != null && !src(a.img)) {
+      delete a.img
+      dropped?.push(a.name)
+    }
   }
   return p
 }

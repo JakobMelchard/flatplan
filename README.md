@@ -28,7 +28,7 @@ The service worker (offline use, install) only registers on HTTPS or localhost.
 
 ## Structure
 
-- `index.html` markup and CSS, `tokens.css` vendored org design tokens (never edit)
+- `index.html` markup (dialogs, icon sprite), `app.css` styles, `tokens.css` vendored org design tokens (never edit)
 - `src/` model, store (IndexedDB, export / import), geometry, history, editor (canvas + input), ui,
   main
 - `sw.js`, `manifest.webmanifest`, `icons/` PWA shell

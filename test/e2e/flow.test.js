@@ -73,6 +73,10 @@ test('place an item, reload, export, reset and import', async () => {
   /** @type {string[]} */
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
+  // CSP violations and failed loads end up here
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  // the app asks in its own dialog, never with alert / confirm / prompt
+  page.on('dialog', (d) => (errors.push(`native dialog: ${d.message()}`), d.dismiss()))
   await page.goto(`http://127.0.0.1:${PORT}/`)
 
   await page.click('#left .ph button')
@@ -80,6 +84,13 @@ test('place an item, reload, export, reset and import', async () => {
   await page.click('dialog[open] button[type=submit]')
   await page.click('#left .card')
   await until(page, (p) => p.assets[0]?.name === 'Sofa' && items(p).length === 1)
+
+  // keyboard shortcut on the placed (selected) item, and a rename through the app's dialog
+  await page.keyboard.press('r')
+  await page.click('.tab.on')
+  await page.fill('#ask input', 'Living room')
+  await page.press('#ask input', 'Enter')
+  await until(page, (p) => items(p)[0].rot === 90 && p.layouts[0].name === 'Living room')
 
   await page.reload()
   await page.locator('#left .card', { hasText: 'Sofa' }).waitFor()
@@ -90,8 +101,8 @@ test('place an item, reload, export, reset and import', async () => {
   assert.equal(out.assets[0].name, 'Sofa')
   assert.equal(items(out).length, 1)
 
-  page.once('dialog', (d) => d.accept())
   await page.click('[title="Reset project"]')
+  await page.click('#ask button[value=ok]')
   await until(page, (p) => p.assets.length === 0 && items(p).length === 0)
 
   await page.setInputFiles('label:has-text("Import") input[type=file]', file)
@@ -99,5 +110,52 @@ test('place an item, reload, export, reset and import', async () => {
   await page.locator('#left .card', { hasText: 'Sofa' }).waitFor()
 
   assert.deepEqual(errors, [])
+  await ctx.close()
+})
+
+test('an import says which linked images it dropped', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } })
+  const page = await ctx.newPage()
+  await page.goto(`http://127.0.0.1:${PORT}/`)
+  const p = {
+    plan: { walls: [] },
+    assets: [{ id: 'a', name: 'Lamp', w: 30, d: 30, h: 150, img: 'https://example.com/x.png' }],
+    layouts: [{ id: 'l', name: 'Layout 1', items: [] }],
+    current: 'l',
+  }
+  await page.setInputFiles('label:has-text("Import") input[type=file]', {
+    name: 'remote.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(p)),
+  })
+  await page.locator('#toast', { hasText: 'Images not imported' }).waitFor()
+  assert.match(await page.locator('#toast').innerText(), /Lamp/)
+  await ctx.close()
+})
+
+test('after a failed read the warning stays until Reset, which saves again', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } })
+  const page = await ctx.newPage()
+  await page.goto(`http://127.0.0.1:${PORT}/`)
+  // a record that is not a project counts as a failed read
+  await page.evaluate(
+    () =>
+      new Promise((res, rej) => {
+        const r = indexedDB.open('flatplan', 1)
+        r.onsuccess = () => {
+          const t = r.result.transaction('kv', 'readwrite')
+          t.objectStore('kv').put({ plan: { walls: 'x' } }, 'project')
+          t.oncomplete = () => (r.result.close(), res(null))
+          t.onerror = rej
+        }
+      }),
+  )
+  await page.reload()
+  const toast = page.locator('#toast')
+  await toast.filter({ hasText: 'Could not read the saved project' }).waitFor()
+  await page.click('[title="Reset project"]')
+  await page.click('#ask button[value=ok]')
+  await toast.waitFor({ state: 'hidden' })
+  await until(page, (p) => Array.isArray(p.layouts))
   await ctx.close()
 })

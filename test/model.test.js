@@ -76,7 +76,11 @@ test('migrate keeps only #rrggbb colours and base64 data URL images', () => {
     { ...a, color: '#aabbcc', img: png },
   ]
   p.plan.image = { ...image, src: 'https://evil.example/plan.png' }
-  const m = migrate(p)
+  p.assets[3].name = 'Remote'
+  /** @type {string[]} */
+  const dropped = []
+  const m = migrate(p, dropped)
+  assert.deepEqual(dropped, ['plan', 'A', 'Remote', 'A', 'A'])
   assert.match(m.assets[0].color, /^#[0-9a-f]{6}$/)
   assert.match(m.assets[1].color, /^#[0-9a-f]{6}$/)
   assert.equal(m.assets[2].color, '#AABBCC')

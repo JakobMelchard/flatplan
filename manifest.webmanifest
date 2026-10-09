@@ -2,6 +2,7 @@
   "name": "flatplan",
   "short_name": "flatplan",
   "description": "2D furniture arrangement planner",
+  "id": "/flatplan/app/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

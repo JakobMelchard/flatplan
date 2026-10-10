@@ -133,6 +133,25 @@ test('an import says which linked images it dropped', async () => {
   await ctx.close()
 })
 
+test('upload a plan and set its scale with Enter', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } })
+  const page = await ctx.newPage()
+  await page.goto(`http://127.0.0.1:${PORT}/`)
+  const up = page.locator('label:has-text("Upload plan")')
+  // the icon keeps its size next to the label
+  assert.equal((await up.locator('svg').boundingBox())?.width, 16)
+
+  const png = await page.screenshot({ clip: { x: 0, y: 0, width: 200, height: 100 } })
+  await up.locator('input').setInputFiles({ name: 'plan.png', mimeType: 'image/png', buffer: png })
+  const cv = page.locator('#c')
+  await cv.click({ position: { x: 300, y: 300 } })
+  await cv.click({ position: { x: 500, y: 300 } })
+  await page.fill('#scale input', '400')
+  await page.press('#scale input', 'Enter')
+  await until(page, (p) => p.plan.image && p.plan.image.cmPerPx !== 1)
+  await ctx.close()
+})
+
 test('after a failed read the warning stays until Reset, which saves again', async () => {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } })
   const page = await ctx.newPage()

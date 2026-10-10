@@ -674,6 +674,8 @@ const scaleDialog = (ed) => {
   const input = /** @type {HTMLInputElement} */ (dlg.querySelector('input'))
   /** @type {(v: number | null) => void} */
   let done = () => {}
+  // type=button: Enter in the field submits with Apply, not with the first button
+  dlg.querySelector('button[type=button]')?.addEventListener('click', () => dlg.close())
   dlg.addEventListener('close', () => done(dlg.returnValue === 'ok' ? +input.value || null : null))
   ed.askLength = (measured) =>
     new Promise((res) => {
